@@ -171,6 +171,22 @@ function LandingPageConteudo() {
 
     try {
       const dataStr = format(dataSelecionada, "yyyy-MM-dd");
+
+      // 1. Cadastra ou atualiza o cliente na base de clientes do profissional
+      try {
+        await supabase.from("clientes").upsert(
+          {
+            empresa_id: profissional.id,
+            nome: nome.trim(),
+            telefone: whatsapp.trim(),
+          },
+          { onConflict: "empresa_id,telefone" }
+        );
+      } catch (clientErr) {
+        console.warn("Aviso ao cadastrar cliente:", clientErr);
+      }
+
+      // 2. Registra o agendamento
       await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
         nome_cliente: nome.trim(),

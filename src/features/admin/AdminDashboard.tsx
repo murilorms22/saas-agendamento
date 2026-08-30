@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
+import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
+import { ModalNovoAgendamento, type AgendamentoItem } from "../../components/ModalNovoAgendamento";
 
 export default function AdminDashboard() {
   return <PageLoader><DashboardConteudo /></PageLoader>;
@@ -18,6 +20,7 @@ type Status = "Pendente" | "Confirmado" | "Cancelado";
 type Agendamento = {
   id: string;
   nomeCliente: string;
+  telefone?: string;
   servico: string;
   horario: string;
   data: string;
@@ -34,6 +37,7 @@ function mapearAgendamento(row: any, servicos: { id: number; nome: string }[]): 
   return {
     id: String(row.id),
     nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
+    telefone: row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
     servico: servicoNome,
     horario: row.horario ?? row.hora ?? "08:00",
     data: row.data ?? row.data_agendamento ?? format(new Date(), "yyyy-MM-dd"),
@@ -47,6 +51,49 @@ function DashboardConteudo() {
 
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [carregando, setCarregando] = useState(true);
+
+  // Estados dos modais de detalhes e edição
+  const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<Agendamento | null>(null);
+  const [agendamentoParaEditar, setAgendamentoParaEditar] = useState<Agendamento | null>(null);
+  const [modalEditarAberto, setModalEditarAberto] = useState(false);
+
+  const handleEditar = (ag: Agendamento) => {
+    setAgendamentoDetalhes(null);
+    setAgendamentoParaEditar(ag);
+    setModalEditarAberto(true);
+  };
+
+  const handleExcluir = async (id: string) => {
+    setAgendamentos((prev) => prev.filter((a) => a.id !== id));
+    try {
+      await supabase.from("agendamentos").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao excluir agendamento:", err);
+    }
+  };
+
+  const handleSalvarEdicao = async (editado: AgendamentoItem) => {
+    setAgendamentos((prev) =>
+      prev.map((a) => (a.id === editado.id ? { ...a, ...editado } : a))
+    );
+    try {
+      await supabase
+        .from("agendamentos")
+        .update({
+          nome_cliente: editado.nomeCliente,
+          cliente_telefone: editado.telefone,
+          servico_nome: editado.servico,
+          data: editado.data,
+          horario: editado.horario,
+          status: editado.status,
+        })
+        .eq("id", editado.id);
+    } catch (err) {
+      console.error("Erro ao salvar edição de agendamento:", err);
+    }
+    setAgendamentoParaEditar(null);
+    setModalEditarAberto(false);
+  };
 
   // Busca agendamentos reais do Supabase
   useEffect(() => {
@@ -77,6 +124,21 @@ function DashboardConteudo() {
     carregar();
   }, [profissional?.id, servicos]);
 
+  // Ouve agendamentos criados (ex: pelo botão da sidebar)
+  useEffect(() => {
+    const handleAgendamentoCriado = (e: any) => {
+      const hojeStr = format(new Date(), "yyyy-MM-dd");
+      if (e.detail && e.detail.data === hojeStr) {
+        setAgendamentos((prev) => {
+          if (prev.some((a) => a.id === e.detail.id)) return prev;
+          return [...prev, e.detail];
+        });
+      }
+    };
+    window.addEventListener("agendamento-criado", handleAgendamentoCriado);
+    return () => window.removeEventListener("agendamento-criado", handleAgendamentoCriado);
+  }, []);
+
   const handleStatus = async (id: string, novoStatus: "Confirmado" | "Cancelado") => {
     // Atualização otimista
     setAgendamentos((prev) =>
@@ -95,30 +157,69 @@ function DashboardConteudo() {
   const confirmados  = agendamentos.filter((a) => a.status === "Confirmado").length;
 
   const statusConfig: Record<Status, { cor: string; icone: React.ReactNode }> = {
-    Pendente:   { cor: "bg-primary/10 text-primary",         icone: <Clock size={14} />        },
-    Confirmado: { cor: "bg-emerald-500/10 text-emerald-500", icone: <CheckCircle2 size={14} /> },
-    Cancelado:  { cor: "bg-rose-500/10 text-rose-500",       icone: <X size={14} />            },
+    Pendente:   { cor: "bg-primary/10 text-primary border border-primary/20",         icone: <Clock size={16} />        },
+    Confirmado: { cor: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20", icone: <CheckCircle2 size={16} /> },
+    Cancelado:  { cor: "bg-rose-500/10 text-rose-500 border border-rose-500/20",       icone: <X size={16} />            },
   };
 
   return (
     <div className="space-y-10 pb-12">
+      {/* Modal de Detalhes do Agendamento */}
+      <AnimatePresence>
+        {agendamentoDetalhes && (
+          <ModalDetalhesAgendamento
+            agendamento={agendamentoDetalhes}
+            onFechar={() => setAgendamentoDetalhes(null)}
+            onEditar={(ag) => handleEditar(ag as Agendamento)}
+            onExcluir={handleExcluir}
+            onAtualizarStatus={handleStatus}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Edição */}
+      <AnimatePresence>
+        {modalEditarAberto && (
+          <ModalNovoAgendamento
+            aberto={modalEditarAberto}
+            data={new Date()}
+            agendamentoInicial={agendamentoParaEditar}
+            empresaId={profissional?.id}
+            onFechar={() => {
+              setModalEditarAberto(false);
+              setAgendamentoParaEditar(null);
+            }}
+            onSalvar={handleSalvarEdicao}
+            servicos={servicos}
+            horariosDisponiveis={
+              profissional?.horariosDisponiveis ?? [
+                "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
+              ]
+            }
+          />
+        )}
+      </AnimatePresence>
+
       {/* Cabeçalho */}
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end border-b border-primary/20 pb-8 gap-6 relative">
         <div className="absolute -top-8 left-0 right-0 h-32 bg-gradient-to-br from-primary/8 to-transparent rounded-3xl -z-10" />
         <div>
-          <h1 className="text-4xl font-display font-bold tracking-tight text-foreground">
+          <div className="flex items-center gap-2 text-primary font-body font-semibold text-sm mb-1 uppercase tracking-wider">
+            <CalendarDays size={16} />
+            <span>{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</span>
+          </div>
+          <h1 className="text-4xl font-display font-extrabold tracking-tight text-foreground">
             Resumo do Dia
           </h1>
-          <p className="text-muted-foreground font-body text-sm font-medium mt-1 flex items-center gap-2 capitalize">
-            <CalendarDays size={16} />
-            {format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          <p className="text-muted-foreground font-body text-sm font-medium mt-1">
+            Veja suas consultas marcadas para hoje e confirme a presença dos clientes.
           </p>
         </div>
 
         {/* Cards de Resumo */}
-        <div className="flex gap-4">
-          <div className="bg-card/80 rounded-2xl p-5 border-l-4 border-primary border border-border/20 flex gap-4 items-center shadow-soft">
-            <div className="w-12 h-12 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
+        <div className="grid grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="bg-card/80 rounded-2xl p-5 border-l-4 border-amber-400 border border-border/20 flex gap-4 items-center shadow-soft">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
               <Clock size={24} />
             </div>
             <div className="flex flex-col">
@@ -127,8 +228,8 @@ function DashboardConteudo() {
             </div>
           </div>
 
-          <div className="bg-card/80 rounded-2xl p-5 border-l-4 border-emerald-500 border border-border/20 flex gap-4 items-center shadow-soft">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+          <div className="bg-card/80 rounded-2xl p-5 border-l-4 border-emerald-400 border border-border/20 flex gap-4 items-center shadow-soft">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
               <CheckCircle2 size={24} />
             </div>
             <div className="flex flex-col">
@@ -190,20 +291,46 @@ function DashboardConteudo() {
                     ${agendamento.status === "Pendente"   ? "bg-card    border-l-primary    border-border/30" : ""}
                   `}
                 >
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex gap-4">
-                      <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary border border-primary/20 shrink-0">
-                        <span className="font-display font-bold text-lg leading-tight">{agendamento.horario}</span>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-display font-black text-base shrink-0 shadow-inner">
+                        {agendamento.nomeCliente.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col justify-center">
-                        <h3 className="font-display font-bold text-xl text-foreground mb-1 leading-tight">{agendamento.nomeCliente}</h3>
-                        <p className="font-body text-sm font-medium text-muted-foreground">{agendamento.servico}</p>
+                        <h3
+                          onClick={() => setAgendamentoDetalhes(agendamento)}
+                          className="font-display font-bold text-xl text-foreground mb-0.5 leading-tight hover:text-primary hover:underline cursor-pointer transition-colors"
+                          title="Clique para ver detalhes e editar"
+                        >
+                          {agendamento.nomeCliente}
+                        </h3>
+                        <p className="font-body text-xs font-semibold text-muted-foreground">{agendamento.servico}</p>
                       </div>
                     </div>
+                  </div>
 
-                    <div className={`px-3 py-1.5 rounded-full font-body font-semibold text-xs flex items-center gap-1.5 transition-colors ${statusConfig[agendamento.status].cor}`}>
-                      {statusConfig[agendamento.status].icone}
-                      {agendamento.status}
+                  {/* Rodapé do card: ações e em baixo na direita horário + ícone de status */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border/20 mt-auto gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEditar(agendamento)}
+                      className="text-xs font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      Detalhes / Editar
+                    </button>
+
+                    {/* Em baixo na direita, ao lado do horário */}
+                    <div className="flex items-center gap-2 ml-auto">
+                      <span className="px-2.5 py-1 rounded-xl bg-secondary font-display font-bold text-xs text-foreground flex items-center gap-1">
+                        <Clock size={12} className="text-primary" />
+                        {agendamento.horario}
+                      </span>
+                      <div
+                        title={`Status: ${agendamento.status}`}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors shadow-xs cursor-help shrink-0 ${statusConfig[agendamento.status].cor}`}
+                      >
+                        {statusConfig[agendamento.status].icone}
+                      </div>
                     </div>
                   </div>
 
@@ -222,7 +349,7 @@ function DashboardConteudo() {
                           <Check size={18} /> Confirmar
                         </button>
                         <button
-                          onClick={() => handleStatus(agendamento.id, "Cancelado")}
+                          onClick={() => setAgendamentoDetalhes(agendamento)}
                           className="flex-1 py-3 rounded-xl font-body font-semibold text-sm bg-secondary text-foreground hover:bg-destructive hover:text-destructive-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <X size={18} /> Cancelar

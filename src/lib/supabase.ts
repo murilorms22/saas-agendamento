@@ -33,6 +33,8 @@ export interface ServicoRow {
   preco_centavos?: number;
   preco?: number | string;
   ativo?: boolean;
+}
+
 /** Tabela: agendamentos */
 export interface AgendamentoRow {
   id?: string | number;
@@ -54,6 +56,15 @@ export interface AgendamentoRow {
   created_at?: string;
 }
 
+/** Tabela: clientes */
+export interface ClienteRow {
+  id?: string;
+  empresa_id: string;
+  nome: string;
+  telefone?: string;
+  created_at?: string;
+}
+
 /**
  * Database — union de todas as tabelas para o cliente tipado.
  * Expanda conforme novos recursos forem adicionados.
@@ -64,6 +75,7 @@ export interface Database {
       empresas: { Row: EmpresaRow };
       servicos: { Row: ServicoRow };
       agendamentos: { Row: AgendamentoRow };
+      clientes: { Row: ClienteRow };
     };
   };
 }

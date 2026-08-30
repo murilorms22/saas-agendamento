@@ -1,6 +1,9 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
-import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2, Plus } from "lucide-react";
 import { useProfessional } from "../store/useProfessional";
+import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
+import { supabase } from "../lib/supabase";
 
 const navItems = [
   { to: "/admin",              label: "Resumo do Dia",            icon: LayoutDashboard, exact: true  },
@@ -11,13 +14,45 @@ const navItems = [
 
 export default function AdminLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { profissional, isLoading } = useProfessional();
+  const [modalAberto, setModalAberto] = useState(false);
 
   const nomeClinica = profissional?.nomeClinica ?? "Carregando...";
   const profissao   = profissional?.profissao   ?? "";
 
   const isActive = (to: string, exact: boolean) =>
     exact ? location.pathname === to : location.pathname.startsWith(to);
+
+  const handleSalvarAgendamento = async (novo: AgendamentoItem) => {
+    if (!profissional?.id) return;
+
+    try {
+      const { data, error } = await supabase.from("agendamentos").insert({
+        empresa_id: profissional.id,
+        nome_cliente: novo.nomeCliente,
+        servico_nome: novo.servico,
+        data: novo.data,
+        horario: novo.horario,
+        status: novo.status,
+      }).select().single();
+
+      const agCriado = {
+        ...novo,
+        id: data?.id ? String(data.id) : novo.id,
+      };
+
+      // Notifica componentes ativos para atualizar a lista na tela
+      window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: agCriado }));
+
+      // Se não estiver na agenda, leva o profissional para a tela da agenda
+      if (location.pathname !== "/admin/agenda") {
+        navigate("/admin/agenda");
+      }
+    } catch (err) {
+      console.error("Erro ao salvar agendamento criado pela sidebar:", err);
+    }
+  };
 
   return (
     <div className="h-[100dvh] flex bg-gradient-to-br from-background via-background to-primary/5 text-foreground overflow-hidden">
@@ -41,8 +76,21 @@ export default function AdminLayout() {
           </div>
         </div>
 
+        {/* Botão Novo Agendamento: Primeira coisa na sidebar */}
+        <div className="p-4 pb-2">
+          <button
+            onClick={() => setModalAberto(true)}
+            className="w-full flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group"
+          >
+            <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:rotate-90 duration-200">
+              <Plus size={14} className="stroke-[3]" />
+            </div>
+            <span>Novo agendamento</span>
+          </button>
+        </div>
+
         {/* Navegação */}
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 py-3 space-y-1 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon, exact }) => {
             const active = isActive(to, exact);
             return (
@@ -78,6 +126,20 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Modal de Novo Agendamento disparado pela Sidebar */}
+      <ModalNovoAgendamento
+        aberto={modalAberto}
+        onFechar={() => setModalAberto(false)}
+        onSalvar={handleSalvarAgendamento}
+        servicos={profissional?.servicos ?? []}
+        horariosDisponiveis={
+          profissional?.horariosDisponiveis ?? [
+            "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
+          ]
+        }
+        empresaId={profissional?.id}
+      />
     </div>
   );
 }

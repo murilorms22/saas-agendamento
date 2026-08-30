@@ -6,7 +6,7 @@
  *  2. Disponibilidade — configurar horários de atendimento e bloqueios
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   format,
   addDays,
@@ -41,11 +41,16 @@ import {
   CalendarDays,
   ArrowRight,
   User,
+  Search,
+  Phone,
+  UserCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
+import { ModalNovoAgendamento } from "../../components/ModalNovoAgendamento";
+import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
 
 // ──────────────────────────────────────────────────────────────
 // Tipos
@@ -58,6 +63,7 @@ interface AgendamentoSemana {
   data: string; // ISO: "2026-09-01"
   horario: string;
   nomeCliente: string;
+  telefone?: string;
   servico: string;
   status: StatusAgendamento;
 }
@@ -132,6 +138,7 @@ function mapearAgendamentoSemana(
     data: row.data ?? row.data_agendamento ?? format(new Date(), "yyyy-MM-dd"),
     horario: row.horario ?? row.hora ?? "08:00",
     nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
+    telefone: row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
     servico: servicoNome,
     status: (row.status === "Confirmado" || row.status === "Cancelado"
       ? row.status
@@ -140,19 +147,22 @@ function mapearAgendamentoSemana(
 }
 
 // ──────────────────────────────────────────────────────────────
-// Sub-componente: Badge de Status
+// Sub-componente: Badge de Status (SOMENTE ÍCONE, com tooltip)
 // ──────────────────────────────────────────────────────────────
 
 function BadgeStatus({ status }: { status: StatusAgendamento }) {
-  const estilos: Record<StatusAgendamento, { cor: string; icone: React.ReactNode }> = {
-    Pendente: { cor: "bg-amber-500/10 text-amber-500", icone: <Clock size={12} /> },
-    Confirmado: { cor: "bg-emerald-500/10 text-emerald-500", icone: <CheckCircle2 size={12} /> },
-    Cancelado: { cor: "bg-rose-500/10 text-rose-500", icone: <X size={12} /> },
+  const estilos: Record<StatusAgendamento, { cor: string; icone: React.ReactNode; tooltip: string }> = {
+    Pendente: { cor: "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30", icone: <Clock size={12} />, tooltip: "Pendente" },
+    Confirmado: { cor: "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Confirmado" },
+    Cancelado: { cor: "bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30", icone: <X size={12} />, tooltip: "Cancelado" },
   };
-  const { cor, icone } = estilos[status];
+  const { cor, icone, tooltip } = estilos[status] ?? estilos.Pendente;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${cor}`}>
-      {icone} {status}
+    <span
+      title={`Status: ${tooltip}`}
+      className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${cor} shrink-0 cursor-help transition-all shadow-xs`}
+    >
+      {icone}
     </span>
   );
 }
@@ -161,9 +171,13 @@ function BadgeStatus({ status }: { status: StatusAgendamento }) {
 // Sub-componente: Card de Agendamento na grade semanal
 // ──────────────────────────────────────────────────────────────
 
-function CardAgendamento({ ag }: { ag: AgendamentoSemana }) {
-  const [expandido, setExpandido] = useState(false);
-
+function CardAgendamento({
+  ag,
+  onVerDetalhes,
+}: {
+  ag: AgendamentoSemana;
+  onVerDetalhes: (ag: AgendamentoSemana) => void;
+}) {
   const fundos: Record<StatusAgendamento, string> = {
     Confirmado: "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-500/50",
     Pendente: "bg-primary/10 border-primary/20 hover:border-primary/50",
@@ -171,280 +185,59 @@ function CardAgendamento({ ag }: { ag: AgendamentoSemana }) {
   };
 
   return (
-    <motion.button
+    <motion.div
       layout
-      onClick={() => setExpandido(!expandido)}
-      className={`w-full text-left p-3 rounded-xl border transition-all text-xs ${fundos[ag.status]}`}
+      onClick={() => onVerDetalhes(ag)}
+      className={`w-full text-left p-2.5 rounded-xl border transition-all text-xs cursor-pointer group hover:shadow-md hover:-translate-y-0.5 ${fundos[ag.status]}`}
+      title="Clique para ver detalhes e editar este agendamento"
     >
-      <p className="font-display font-bold text-foreground truncate leading-tight">{ag.nomeCliente}</p>
-      <p className="font-body text-muted-foreground truncate mt-0.5">{ag.servico}</p>
-      <div className="flex items-center justify-between mt-2">
-        <span className="font-body font-bold text-foreground flex items-center gap-1">
-          <Clock size={10} /> {ag.horario}
+      <p className="font-display font-bold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+        {ag.nomeCliente}
+      </p>
+      <p className="font-body text-muted-foreground truncate mt-0.5 text-[11px]">{ag.servico}</p>
+      <div className="flex items-center justify-between mt-2.5 pt-1.5 border-t border-border/15">
+        <span className="text-[10px] font-body text-primary font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+          Detalhes →
         </span>
-        <BadgeStatus status={ag.status} />
-      </div>
-      <AnimatePresence>
-        {expandido && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-border/30 mt-2 pt-2 flex gap-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); }}
-                className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground font-body font-bold text-[10px] hover:opacity-90 transition-opacity"
-              >
-                Confirmar
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); }}
-                className="flex-1 py-1.5 rounded-lg bg-secondary text-foreground font-body font-bold text-[10px] hover:bg-destructive hover:text-destructive-foreground transition-all"
-              >
-                Cancelar
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.button>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// Sub-componente: Modal de Novo Agendamento
-// ──────────────────────────────────────────────────────────────
-
-function mascararTelefone(valor: string): string {
-  const digitos = valor.replace(/\D/g, "").slice(0, 11);
-  if (digitos.length === 0) return "";
-  if (digitos.length <= 2) return `(${digitos}`;
-  if (digitos.length <= 6) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
-  if (digitos.length <= 10) return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 6)}-${digitos.slice(6)}`;
-  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
-}
-
-interface ModalNovoAgendamentoProps {
-  aberto: boolean;
-  data: Date;
-  onFechar: () => void;
-  onSalvar: (novo: AgendamentoSemana) => void;
-  servicos: { id: number; nome: string; preco: string; duracao: string }[];
-  horariosDisponiveis: string[];
-}
-
-function ModalNovoAgendamento({
-  aberto,
-  data,
-  onFechar,
-  onSalvar,
-  servicos,
-  horariosDisponiveis,
-}: ModalNovoAgendamentoProps) {
-  const [nomeCliente, setNomeCliente] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [servicoNome, setServicoNome] = useState(servicos[0]?.nome ?? "Consulta");
-  const [horario, setHorario] = useState(horariosDisponiveis[0] ?? "08:00");
-  const [status, setStatus] = useState<StatusAgendamento>("Confirmado");
-
-  useEffect(() => {
-    if (aberto) {
-      setNomeCliente("");
-      setTelefone("");
-      setServicoNome(servicos[0]?.nome ?? "Consulta");
-      setHorario(horariosDisponiveis[0] ?? "08:00");
-      setStatus("Confirmado");
-    }
-  }, [aberto, data, servicos, horariosDisponiveis]);
-
-  if (!aberto) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nomeCliente.trim()) return;
-
-    const novo: AgendamentoSemana = {
-      id: `ag_${Date.now()}`,
-      data: format(data, "yyyy-MM-dd"),
-      horario,
-      nomeCliente: nomeCliente.trim(),
-      servico: servicoNome,
-      status,
-    };
-
-    onSalvar(novo);
-    onFechar();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onFechar}
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-      />
-
-      {/* Janela do Modal */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative z-10 w-full max-w-md bg-card rounded-3xl p-6 md:p-8 shadow-floating border border-border/50"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-display font-bold text-foreground">
-              Novo Agendamento
-            </h3>
-            <p className="text-xs font-body text-primary font-semibold mt-0.5 capitalize">
-              {format(data, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-            </p>
-          </div>
-          <button
-            onClick={onFechar}
-            className="w-8 h-8 rounded-full bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <X size={16} />
-          </button>
+        {/* Em baixo na direita, ao lado do horário */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="font-body font-bold text-foreground flex items-center gap-1 text-[11px]">
+            <Clock size={10} className="text-primary" /> {ag.horario}
+          </span>
+          <BadgeStatus status={ag.status} />
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Nome do Paciente / Cliente
-            </label>
-            <input
-              type="text"
-              required
-              autoFocus
-              value={nomeCliente}
-              onChange={(e) => setNomeCliente(e.target.value)}
-              placeholder="Ex: João da Silva"
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-              WhatsApp / Telefone
-            </label>
-            <input
-              type="tel"
-              value={telefone}
-              onChange={(e) => setTelefone(mascararTelefone(e.target.value))}
-              placeholder="(11) 99999-9999"
-              maxLength={15}
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Serviço
-              </label>
-              <select
-                value={servicoNome}
-                onChange={(e) => setServicoNome(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                {servicos.map((s) => (
-                  <option key={s.id} value={s.nome}>
-                    {s.nome} ({s.preco})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Horário
-              </label>
-              <select
-                value={horario}
-                onChange={(e) => setHorario(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                {horariosDisponiveis.map((h) => (
-                  <option key={h} value={h}>
-                    {h}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Status Inicial
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setStatus("Confirmado")}
-                className={`flex-1 py-2 rounded-xl text-xs font-body font-bold transition-all border cursor-pointer ${
-                  status === "Confirmado"
-                    ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/40 shadow-sm"
-                    : "border-border text-muted-foreground hover:bg-secondary/40"
-                }`}
-              >
-                Confirmado
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus("Pendente")}
-                className={`flex-1 py-2 rounded-xl text-xs font-body font-bold transition-all border cursor-pointer ${
-                  status === "Pendente"
-                    ? "bg-amber-500/15 text-amber-600 border-amber-500/40 shadow-sm"
-                    : "border-border text-muted-foreground hover:bg-secondary/40"
-                }`}
-              >
-                Pendente
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4 border-t border-border/20 mt-6">
-            <button
-              type="button"
-              onClick={onFechar}
-              className="flex-1 py-2.5 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-body font-bold text-xs transition-all cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 font-body font-bold text-xs shadow-soft transition-all cursor-pointer"
-            >
-              Salvar Agendamento
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 }
 
+
+
 // ──────────────────────────────────────────────────────────────
-// Aba 1: Visualizador de Agenda (Semana & Mês)
+// Aba 1: Visualizador de Agenda (Dia, Semana & Mês)
 // ──────────────────────────────────────────────────────────────
 
-type ModoVisualizacao = "semana" | "mes";
+type ModoVisualizacao = "dia" | "semana" | "mes";
+
+const HORAS_DIA = [
+  "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00",
+  "19:00", "20:00"
+];
 
 interface VisualizadorAgendaProps {
   agendamentos: AgendamentoSemana[];
   onAdicionarAgendamento?: (novo: AgendamentoSemana) => void;
+  onAtualizarAgendamento?: (editado: AgendamentoSemana) => void;
+  onExcluirAgendamento?: (id: string) => void;
   onAtualizarStatus?: (id: string, novoStatus: StatusAgendamento) => void;
 }
 
 function VisualizadorAgenda({
   agendamentos,
   onAdicionarAgendamento,
+  onAtualizarAgendamento,
+  onExcluirAgendamento,
   onAtualizarStatus,
 }: VisualizadorAgendaProps) {
   const { profissional } = useProfessional();
@@ -453,6 +246,12 @@ function VisualizadorAgenda({
   const [dataRef, setDataRef] = useState<Date>(hoje);
   const [diaSelecionado, setDiaSelecionado] = useState<Date>(hoje);
 
+  // Estado do Modal de Detalhes
+  const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<AgendamentoSemana | null>(null);
+
+  // Estado do Modal de Edição (reutiliza ModalNovoAgendamento)
+  const [agendamentoParaEditar, setAgendamentoParaEditar] = useState<AgendamentoSemana | null>(null);
+
   // Estado do Modal de Novo Agendamento
   const [modalNovo, setModalNovo] = useState<{ aberto: boolean; data: Date }>({
     aberto: false,
@@ -460,8 +259,28 @@ function VisualizadorAgenda({
   });
 
   const abrirNovoAgendamento = (dia: Date) => {
+    setAgendamentoParaEditar(null);
     setModalNovo({ aberto: true, data: dia });
     setDiaSelecionado(dia);
+  };
+
+  const handleEditarAgendamento = (ag: AgendamentoSemana) => {
+    setAgendamentoDetalhes(null);
+    setAgendamentoParaEditar(ag);
+    setModalNovo({ aberto: true, data: parseISO(ag.data) });
+  };
+
+  const handleExcluirAgendamento = (id: string) => {
+    if (onExcluirAgendamento) {
+      onExcluirAgendamento(id);
+    }
+  };
+
+  // Abre a visão detalhada de um dia específico hora a hora
+  const abrirDiaDetalhado = (dia: Date) => {
+    setDataRef(dia);
+    setDiaSelecionado(dia);
+    setModo("dia");
   };
 
   // ── Helpers de data ──────────────────────────────────────────
@@ -481,12 +300,16 @@ function VisualizadorAgenda({
   const confirmadosNoMes = agsDoMes.filter((a) => a.status === "Confirmado").length;
   const pendentesNoMes = agsDoMes.filter((a) => a.status === "Pendente").length;
 
-  // Agendamentos do dia selecionado (para o painel de detalhes no modo mês)
+  // Agendamentos do dia selecionado (para o modo dia e o painel de detalhes no modo mês)
   const agsDoDiaSelecionado = agsPorData(diaSelecionado);
 
   // ── Navegação ────────────────────────────────────────────────
   const navegarAnterior = () => {
-    if (modo === "semana") {
+    if (modo === "dia") {
+      const d = subDays(diaSelecionado, 1);
+      setDataRef(d);
+      setDiaSelecionado(d);
+    } else if (modo === "semana") {
       setDataRef((d) => subWeeks(d, 1));
     } else {
       setDataRef((d) => subMonths(d, 1));
@@ -494,7 +317,11 @@ function VisualizadorAgenda({
   };
 
   const navegarProximo = () => {
-    if (modo === "semana") {
+    if (modo === "dia") {
+      const d = addDays(diaSelecionado, 1);
+      setDataRef(d);
+      setDiaSelecionado(d);
+    } else if (modo === "semana") {
       setDataRef((d) => addWeeks(d, 1));
     } else {
       setDataRef((d) => addMonths(d, 1));
@@ -514,17 +341,38 @@ function VisualizadorAgenda({
 
   return (
     <div className="space-y-6">
-      {/* ── Modal de Novo Agendamento ── */}
+      {/* ── Modal de Detalhes do Agendamento (com lápis de edição e confirmação de exclusão) ── */}
+      <AnimatePresence>
+        {agendamentoDetalhes && (
+          <ModalDetalhesAgendamento
+            agendamento={agendamentoDetalhes}
+            onFechar={() => setAgendamentoDetalhes(null)}
+            onEditar={(ag) => handleEditarAgendamento(ag as AgendamentoSemana)}
+            onExcluir={handleExcluirAgendamento}
+            onAtualizarStatus={onAtualizarStatus}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal de Novo / Editar Agendamento ── */}
       <AnimatePresence>
         {modalNovo.aberto && (
           <ModalNovoAgendamento
             aberto={modalNovo.aberto}
             data={modalNovo.data}
-            onFechar={() => setModalNovo((prev) => ({ ...prev, aberto: false }))}
+            agendamentoInicial={agendamentoParaEditar}
+            empresaId={profissional?.id}
+            onFechar={() => {
+              setModalNovo((prev) => ({ ...prev, aberto: false }));
+              setAgendamentoParaEditar(null);
+            }}
             onSalvar={(novo) => {
-              if (onAdicionarAgendamento) {
+              if (agendamentoParaEditar && onAtualizarAgendamento) {
+                onAtualizarAgendamento(novo);
+              } else if (onAdicionarAgendamento) {
                 onAdicionarAgendamento(novo);
               }
+              setAgendamentoParaEditar(null);
               setDiaSelecionado(parseISO(novo.data));
             }}
             servicos={profissional?.servicos ?? []}
@@ -540,14 +388,32 @@ function VisualizadorAgenda({
       {/* ── Barra Superior: Título + Seletor de Modo + Navegação ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/60 p-4 rounded-2xl border border-border/30 shadow-soft">
         <div>
-          {modo === "semana" ? (
+          {modo === "dia" ? (
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground capitalize flex items-center gap-2">
+                <Clock size={20} className="text-primary" />
+                {format(diaSelecionado, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+              </h2>
+              <div className="flex items-center gap-3 text-xs font-body text-muted-foreground mt-1">
+                <span><strong>{agsDoDiaSelecionado.length}</strong> consulta(s) hoje</span>
+                <span>•</span>
+                <span className="text-emerald-500 font-semibold">
+                  {agsDoDiaSelecionado.filter((a) => a.status === "Confirmado").length} confirmadas
+                </span>
+                <span>•</span>
+                <span className="text-amber-500 font-semibold">
+                  {agsDoDiaSelecionado.filter((a) => a.status === "Pendente").length} pendentes
+                </span>
+              </div>
+            </div>
+          ) : modo === "semana" ? (
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">
                 Semana de {format(semana[0], "dd 'de' MMMM", { locale: ptBR })}
                 {" "}a {format(semana[6], "dd 'de' MMMM", { locale: ptBR })}
               </h2>
               <p className="text-xs font-body text-muted-foreground mt-0.5">
-                Passe o mouse sobre um dia ou dê duplo clique para agendar
+                Clique no cabeçalho do dia para abrir a visão hora por hora detalhada
               </p>
             </div>
           ) : (
@@ -568,8 +434,19 @@ function VisualizadorAgenda({
         </div>
 
         <div className="flex items-center gap-3 self-end md:self-center">
-          {/* Seletor Semana / Mês */}
+          {/* Seletor Dia / Semana / Mês */}
           <div className="flex items-center bg-secondary/50 p-1 rounded-xl border border-border/30">
+            <button
+              onClick={() => setModo("dia")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
+                modo === "dia"
+                  ? "bg-card text-primary shadow-sm border border-border/40"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Clock size={14} />
+              Dia (Hora a hora)
+            </button>
             <button
               onClick={() => setModo("semana")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
@@ -590,7 +467,7 @@ function VisualizadorAgenda({
               }`}
             >
               <LayoutGrid size={14} />
-              Mês (Geral)
+              Mês
             </button>
           </div>
 
@@ -622,7 +499,168 @@ function VisualizadorAgenda({
 
       {/* ── Conteúdo Conforme o Modo Ativo ── */}
       <AnimatePresence mode="wait">
-        {modo === "semana" ? (
+        {modo === "dia" ? (
+          /* ── VISÃO DIÁRIA DETALHADA (Hora por Hora) ── */
+          <motion.div
+            key={`visao-dia-${diaSelecionado.toISOString()}`}
+            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: -10 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="space-y-4"
+          >
+            {/* Barra de Ações Rápidas do Dia */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card/80 p-4 rounded-2xl border border-border/30 shadow-soft">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setModo("semana")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-body font-bold transition-all hover:-translate-x-0.5 cursor-pointer shadow-sm"
+                >
+                  <ChevronLeft size={14} />
+                  Voltar para a Semana
+                </button>
+                <div className="h-4 w-[1px] bg-border/40" />
+                <span className="font-body text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Clock size={13} className="text-primary" />
+                  Grade de atendimento hora a hora
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => abrirNovoAgendamento(diaSelecionado)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+                >
+                  <Plus size={14} />
+                  Novo agendamento neste dia
+                </button>
+              </div>
+            </div>
+
+            {/* Timeline Hora por Hora */}
+            <div className="bg-card rounded-3xl border border-border/40 divide-y divide-border/20 shadow-floating overflow-hidden">
+              {HORAS_DIA.map((hora) => {
+                const horaPrefixo = hora.split(":")[0];
+                const agsNestaHora = agsDoDiaSelecionado.filter((ag) => {
+                  const agHora = ag.horario.split(":")[0];
+                  return agHora === horaPrefixo;
+                });
+
+                return (
+                  <div
+                    key={hora}
+                    className="flex flex-col sm:flex-row items-start sm:items-stretch group/linha hover:bg-secondary/15 transition-colors"
+                  >
+                    {/* Indicador de Horário */}
+                    <div className="w-full sm:w-28 p-3 sm:p-4 shrink-0 flex sm:flex-col items-center sm:items-start justify-between border-b sm:border-b-0 sm:border-r border-border/20 bg-secondary/10">
+                      <span className="font-display font-extrabold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-1">
+                        <Clock size={13} className="text-primary/70" />
+                        {hora}
+                      </span>
+                      <span className="font-body text-[10px] font-semibold text-muted-foreground/60">
+                        {agsNestaHora.length > 0
+                          ? `${agsNestaHora.length} consulta(s)`
+                          : "Horário livre"}
+                      </span>
+                    </div>
+
+                    {/* Espaço das Consultas / Slot Livre */}
+                    <div className="flex-1 p-3 sm:p-4 w-full">
+                      {agsNestaHora.length > 0 ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {agsNestaHora.map((ag) => (
+                            <div
+                              key={ag.id}
+                              className={`p-4 rounded-2xl border-l-4 border transition-all duration-300 bg-background/90 shadow-sm flex flex-col justify-between gap-3 ${
+                                ag.status === "Confirmado"
+                                  ? "border-l-emerald-500 border-border/30 shadow-emerald-500/5"
+                                  : ag.status === "Cancelado"
+                                  ? "border-l-rose-500 border-border/20 opacity-60 grayscale-[30%]"
+                                  : "border-l-primary border-border/30 shadow-primary/5"
+                              }`}
+                            >
+                              <div
+                                onClick={() => setAgendamentoDetalhes(ag)}
+                                className="flex items-start justify-between gap-3 cursor-pointer group/header"
+                                title="Clique para ver detalhes completos e editar"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-extrabold text-sm shrink-0 shadow-inner group-hover/header:scale-105 transition-transform">
+                                    {ag.nomeCliente.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-display font-bold text-base text-foreground leading-snug group-hover/header:text-primary group-hover/header:underline transition-colors">
+                                      {ag.nomeCliente}
+                                    </h4>
+                                    <p className="font-body text-xs font-semibold text-primary mt-0.5">
+                                      {ag.servico}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Ações Rápidas de Edição e Cancelamento + Horário e Status à direita */}
+                              <div className="flex items-center justify-between pt-2.5 border-t border-border/20 gap-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditarAgendamento(ag)}
+                                    className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                    title="Editar consulta"
+                                  >
+                                    <Pencil size={12} />
+                                    <span>Editar</span>
+                                  </button>
+                                  {ag.status !== "Confirmado" && (
+                                    <button
+                                      onClick={() => onAtualizarStatus?.(ag.id, "Confirmado")}
+                                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <CheckCircle2 size={12} /> Confirmar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => setAgendamentoDetalhes(ag)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                    title="Cancelar consulta"
+                                  >
+                                    <Trash2 size={12} /> Cancelar
+                                  </button>
+                                </div>
+
+                                {/* Em baixo na direita, ao lado do horário */}
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                  <span className="px-2.5 py-1 rounded-lg bg-secondary font-body font-bold text-xs text-foreground flex items-center gap-1 shadow-sm">
+                                    <Clock size={11} className="text-primary" />
+                                    {ag.horario}
+                                  </span>
+                                  <BadgeStatus status={ag.status} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        /* Slot de Horário Livre */
+                        <div
+                          onClick={() => abrirNovoAgendamento(diaSelecionado)}
+                          className="w-full min-h-[46px] rounded-xl border border-dashed border-border/40 hover:border-primary/60 hover:bg-primary/5 flex items-center justify-between px-4 transition-all cursor-pointer group/slot"
+                        >
+                          <span className="font-body text-xs text-muted-foreground/50 group-hover/slot:text-primary transition-colors">
+                            Horário livre para atendimento
+                          </span>
+                          <span className="opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center gap-1 text-xs font-body font-bold text-primary">
+                            <Plus size={14} /> Agendar às {hora}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : modo === "semana" ? (
           /* ── VISÃO SEMANAL (7 Colunas) ── */
           <motion.div
             key="visao-semana"
@@ -642,23 +680,27 @@ function VisualizadorAgenda({
                     key={dia.toString()}
                     onDoubleClick={() => abrirNovoAgendamento(dia)}
                     className="group relative flex flex-col gap-2 min-h-[160px] bg-card/40 hover:bg-card/70 p-2.5 rounded-2xl border border-border/20 hover:border-primary/40 transition-all shadow-sm"
-                    title="Duplo clique para criar novo agendamento neste dia"
+                    title="Clique no cabeçalho para abrir o dia ou dê duplo clique para agendar"
                   >
-                    {/* Cabeçalho do Dia */}
-                    <div
-                      className={`text-center py-2 px-1 rounded-xl transition-colors ${
+                    {/* Cabeçalho do Dia: Clicar abre a visão detalhada do dia hora por hora */}
+                    <button
+                      type="button"
+                      onClick={() => abrirDiaDetalhado(dia)}
+                      className={`text-center py-2 px-1 rounded-xl transition-all cursor-pointer group/header hover:scale-[1.03] hover:shadow-md ${
                         ehHoje
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "bg-secondary/40 text-foreground"
+                          ? "bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30"
+                          : "bg-secondary/40 text-foreground hover:bg-primary/10 hover:text-primary"
                       }`}
+                      title="Clique para abrir a visão hora a hora deste dia"
                     >
-                      <div className="font-body text-[10px] font-bold uppercase tracking-wider opacity-75">
-                        {format(dia, "EEE", { locale: ptBR })}
+                      <div className="font-body text-[10px] font-bold uppercase tracking-wider opacity-75 group-hover/header:opacity-100 flex items-center justify-center gap-0.5">
+                        <span>{format(dia, "EEE", { locale: ptBR })}</span>
+                        <ArrowRight size={10} className="opacity-0 group-hover/header:opacity-100 transition-opacity" />
                       </div>
                       <div className="font-display font-extrabold text-lg leading-none mt-0.5">
                         {format(dia, "d")}
                       </div>
-                    </div>
+                    </button>
 
                     {/* Botão Hover '+ Novo agendamento' na Semana */}
                     <button
@@ -681,7 +723,13 @@ function VisualizadorAgenda({
                           </span>
                         </div>
                       ) : (
-                        ags.map((ag) => <CardAgendamento key={ag.id} ag={ag} />)
+                        ags.map((ag) => (
+                          <CardAgendamento
+                            key={ag.id}
+                            ag={ag}
+                            onVerDetalhes={(selecionado) => setAgendamentoDetalhes(selecionado)}
+                          />
+                        ))
                       )}
                     </div>
                   </div>
@@ -821,7 +869,14 @@ function VisualizadorAgenda({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 self-start sm:self-center">
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+                  <button
+                    onClick={() => abrirDiaDetalhado(diaSelecionado)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-body font-bold text-xs transition-all shadow-sm cursor-pointer"
+                  >
+                    <Clock size={14} />
+                    Ver hora por hora
+                  </button>
                   <button
                     onClick={() => abrirNovoAgendamento(diaSelecionado)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 font-body font-bold text-xs transition-all shadow-soft cursor-pointer"
@@ -865,17 +920,12 @@ function VisualizadorAgenda({
                     {agsDoDiaSelecionado.map((ag) => (
                       <div
                         key={ag.id}
-                        className="p-4 rounded-2xl border border-border/30 bg-background flex flex-col justify-between gap-3 shadow-sm hover:border-primary/40 transition-colors"
+                        onClick={() => setAgendamentoDetalhes(ag)}
+                        className="p-4 rounded-2xl border border-border/30 bg-background flex flex-col justify-between gap-3 shadow-sm hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group"
+                        title="Clique para ver detalhes completos e editar"
                       >
                         <div>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="font-display font-bold text-sm text-primary flex items-center gap-1">
-                              <Clock size={14} />
-                              {ag.horario}
-                            </span>
-                            <BadgeStatus status={ag.status} />
-                          </div>
-                          <p className="font-display font-bold text-foreground text-base">
+                          <p className="font-display font-bold text-foreground text-base group-hover:text-primary transition-colors">
                             {ag.nomeCliente}
                           </p>
                           <p className="font-body text-xs text-muted-foreground mt-0.5">
@@ -883,19 +933,34 @@ function VisualizadorAgenda({
                           </p>
                         </div>
 
-                        <div className="flex gap-2 pt-2 border-t border-border/20">
-                          <button
-                            onClick={() => onAtualizarStatus?.(ag.id, "Confirmado")}
-                            className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground font-body font-bold text-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <CheckCircle2 size={12} /> Confirmar
-                          </button>
-                          <button
-                            onClick={() => onAtualizarStatus?.(ag.id, "Cancelado")}
-                            className="flex-1 py-1.5 rounded-lg bg-secondary text-foreground hover:bg-destructive hover:text-destructive-foreground font-body font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <X size={12} /> Cancelar
-                          </button>
+                        <div className="flex items-center justify-between pt-2.5 border-t border-border/20">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditarAgendamento(ag);
+                              }}
+                              className="text-[11px] font-body text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <Pencil size={11} /> Editar
+                            </button>
+                            <button
+                              onClick={() => setAgendamentoDetalhes(ag)}
+                              className="text-[11px] font-body text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+
+                          {/* Em baixo na direita, ao lado do horário */}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <span className="font-display font-bold text-xs text-foreground flex items-center gap-1">
+                              <Clock size={12} className="text-primary" />
+                              {ag.horario}
+                            </span>
+                            <BadgeStatus status={ag.status} />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1252,6 +1317,20 @@ function AgendaConteudo() {
     carregar();
   }, [profissional?.id, profissional?.servicos]);
 
+  // Ouve eventos de agendamentos criados (ex: pelo botão da sidebar)
+  useEffect(() => {
+    const handleAgendamentoCriado = (e: any) => {
+      if (e.detail) {
+        setAgendamentos((prev) => {
+          if (prev.some((a) => a.id === e.detail.id)) return prev;
+          return [...prev, e.detail];
+        });
+      }
+    };
+    window.addEventListener("agendamento-criado", handleAgendamentoCriado);
+    return () => window.removeEventListener("agendamento-criado", handleAgendamentoCriado);
+  }, []);
+
   const handleAdicionarAgendamento = async (novo: AgendamentoSemana) => {
     // Atualização otimista
     setAgendamentos((prev) => [...prev, novo]);
@@ -1279,6 +1358,42 @@ function AgendaConteudo() {
       }
     } catch (err) {
       console.error("Erro ao salvar agendamento no Supabase:", err);
+    }
+  };
+
+  const handleAtualizarAgendamento = async (editado: AgendamentoSemana) => {
+    // Atualização otimista
+    setAgendamentos((prev) =>
+      prev.map((a) => (a.id === editado.id ? editado : a))
+    );
+
+    // Persiste no Supabase
+    try {
+      await supabase
+        .from("agendamentos")
+        .update({
+          nome_cliente: editado.nomeCliente,
+          cliente_telefone: editado.telefone,
+          servico_nome: editado.servico,
+          data: editado.data,
+          horario: editado.horario,
+          status: editado.status,
+        })
+        .eq("id", editado.id);
+    } catch (err) {
+      console.error("Erro ao atualizar agendamento no Supabase:", err);
+    }
+  };
+
+  const handleExcluirAgendamento = async (id: string) => {
+    // Atualização otimista (remove da agenda)
+    setAgendamentos((prev) => prev.filter((a) => a.id !== id));
+
+    // Exclui da tabela agendamentos (o cliente permanece na tabela clientes intacto)
+    try {
+      await supabase.from("agendamentos").delete().eq("id", id);
+    } catch (err) {
+      console.error("Erro ao excluir agendamento do Supabase:", err);
     }
   };
 
@@ -1344,6 +1459,8 @@ function AgendaConteudo() {
             <VisualizadorAgenda
               agendamentos={agendamentos}
               onAdicionarAgendamento={handleAdicionarAgendamento}
+              onAtualizarAgendamento={handleAtualizarAgendamento}
+              onExcluirAgendamento={handleExcluirAgendamento}
               onAtualizarStatus={handleAtualizarStatus}
             />
           </motion.div>
