@@ -3,19 +3,21 @@ import RootLayout from "./layouts/RootLayout";
 import AdminLayout from "./layouts/AdminLayout";
 import LandingPage from "./features/landing/LandingPage";
 import AdminDashboard from "./features/admin/AdminDashboard";
+import AgendaProfissional from "./features/admin/AgendaProfissional";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Client Front */}
+        {/* Área Pública — Tela de Agendamento do Cliente */}
         <Route path="/" element={<RootLayout />}>
           <Route index element={<LandingPage />} />
         </Route>
 
-        {/* Admin Dashboard */}
+        {/* Painel do Profissional */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
+          <Route path="agenda" element={<AgendaProfissional />} />
         </Route>
       </Routes>
     </BrowserRouter>
