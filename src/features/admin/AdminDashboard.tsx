@@ -27,20 +27,37 @@ type Agendamento = {
   status: Status;
 };
 
-function mapearAgendamento(row: any, servicos: { id: number; nome: string }[]): Agendamento {
+function mapearAgendamento(row: any, servicos: { id: number | string; nome: string }[]): Agendamento {
   const servicoNome =
     row.servico_nome ??
     row.servico ??
     servicos.find((s) => String(s.id) === String(row.servico_id))?.nome ??
     "Consulta";
 
+  let dataFinal = row.data ?? row.data_agendamento;
+  if (!dataFinal && row.data_hora_agendamento) {
+    dataFinal = String(row.data_hora_agendamento).split("T")[0];
+  }
+  if (!dataFinal) {
+    dataFinal = format(new Date(), "yyyy-MM-dd");
+  }
+
+  let horarioFinal = row.horario ?? row.hora;
+  if (!horarioFinal && row.data_hora_agendamento) {
+    const parte = String(row.data_hora_agendamento).split("T")[1];
+    if (parte) horarioFinal = parte.slice(0, 5);
+  }
+  if (!horarioFinal) {
+    horarioFinal = "08:00";
+  }
+
   return {
     id: String(row.id),
     nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
-    telefone: row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
+    telefone: row.whatsapp_cliente ?? row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
     servico: servicoNome,
-    horario: row.horario ?? row.hora ?? "08:00",
-    data: row.data ?? row.data_agendamento ?? format(new Date(), "yyyy-MM-dd"),
+    horario: horarioFinal,
+    data: dataFinal,
     status: (row.status === "Confirmado" || row.status === "Cancelado" ? row.status : "Pendente") as Status,
   };
 }
@@ -122,6 +139,29 @@ function DashboardConteudo() {
     }
 
     carregar();
+
+    // 1. Re-carrega automaticamente quando o usuário volta para a aba
+    const handleFocus = () => {
+      carregar();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // 2. Sincronização em tempo real via Supabase Realtime
+    const channel = supabase
+      .channel("dashboard-mudancas-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agendamentos" },
+        () => {
+          carregar();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      supabase.removeChannel(channel);
+    };
   }, [profissional?.id, servicos]);
 
   // Ouve agendamentos criados (ex: pelo botão da sidebar)

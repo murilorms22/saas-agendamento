@@ -107,7 +107,10 @@ function PainelInicialConteudo() {
           .order("horario", { ascending: true });
 
         if (ags) {
-          const deHoje = ags.filter((a: any) => a.data === hojeStr);
+          const deHoje = ags.filter((a: any) => {
+            const dataVal = a.data ?? (a.data_hora_agendamento ? a.data_hora_agendamento.split("T")[0] : "");
+            return dataVal === hojeStr;
+          });
           const pendentes = ags.filter((a: any) => a.status === "Pendente");
           setAgendamentosHoje(deHoje);
           setAgendamentosPendentes(pendentes);
@@ -128,6 +131,29 @@ function PainelInicialConteudo() {
     }
 
     carregarDados();
+
+    // 1. Re-carrega automaticamente quando o usuário volta para a aba
+    const handleFocus = () => {
+      carregarDados();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // 2. Sincronização em tempo real via Supabase Realtime
+    const channel = supabase
+      .channel("painel-mudancas-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agendamentos" },
+        () => {
+          carregarDados();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      supabase.removeChannel(channel);
+    };
   }, [profissional?.id]);
 
   const nomeProfissional = profissional?.nomeClinica ?? "Profissional";

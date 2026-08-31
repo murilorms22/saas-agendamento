@@ -125,7 +125,7 @@ function gerarDiasDoMes(mesAtual: Date): Date[] {
 
 function mapearAgendamentoSemana(
   row: any,
-  servicos: { id: number; nome: string }[]
+  servicos: { id: number | string; nome: string }[]
 ): AgendamentoSemana {
   const servicoNome =
     row.servico_nome ??
@@ -133,12 +133,33 @@ function mapearAgendamentoSemana(
     servicos.find((s) => String(s.id) === String(row.servico_id))?.nome ??
     "Consulta";
 
+  // Extrai data: se row.data estiver nulo, extrai de data_hora_agendamento
+  let dataFinal = row.data ?? row.data_agendamento;
+  if (!dataFinal && row.data_hora_agendamento) {
+    dataFinal = String(row.data_hora_agendamento).split("T")[0];
+  }
+  if (!dataFinal) {
+    dataFinal = format(new Date(), "yyyy-MM-dd");
+  }
+
+  // Extrai horário: se row.horario estiver nulo, extrai de data_hora_agendamento
+  let horarioFinal = row.horario ?? row.hora;
+  if (!horarioFinal && row.data_hora_agendamento) {
+    const parteHora = String(row.data_hora_agendamento).split("T")[1];
+    if (parteHora) {
+      horarioFinal = parteHora.slice(0, 5);
+    }
+  }
+  if (!horarioFinal) {
+    horarioFinal = "08:00";
+  }
+
   return {
     id: String(row.id),
-    data: row.data ?? row.data_agendamento ?? format(new Date(), "yyyy-MM-dd"),
-    horario: row.horario ?? row.hora ?? "08:00",
+    data: dataFinal,
+    horario: horarioFinal,
     nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
-    telefone: row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
+    telefone: row.whatsapp_cliente ?? row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
     servico: servicoNome,
     status: (row.status === "Confirmado" || row.status === "Cancelado"
       ? row.status
@@ -1384,7 +1405,7 @@ function AgendaConteudo() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>("calendario");
   const [agendamentos, setAgendamentos] = useState<AgendamentoSemana[]>([]);
 
-  // Busca agendamentos reais do Supabase
+  // Busca agendamentos reais do Supabase e escuta alterações em tempo real
   useEffect(() => {
     async function carregar() {
       if (!profissional?.id) return;
@@ -1407,21 +1428,45 @@ function AgendaConteudo() {
     }
 
     carregar();
+
+    // 1. Re-carrega automaticamente quando o usuário volta para a aba
+    const handleFocus = () => {
+      carregar();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // 2. Sincronização em tempo real via Supabase Realtime
+    const channel = supabase
+      .channel("agenda-mudancas-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agendamentos" },
+        () => {
+          carregar();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      supabase.removeChannel(channel);
+    };
   }, [profissional?.id, profissional?.servicos]);
 
-  // Ouve eventos de agendamentos criados (ex: pelo botão da sidebar)
+  // Ouve eventos de agendamentos criados localmente (ex: pelo botão da sidebar ou modal)
   useEffect(() => {
     const handleAgendamentoCriado = (e: any) => {
       if (e.detail) {
         setAgendamentos((prev) => {
           if (prev.some((a) => a.id === e.detail.id)) return prev;
-          return [...prev, e.detail];
+          const mapeado = mapearAgendamentoSemana(e.detail, profissional?.servicos ?? []);
+          return [...prev, mapeado];
         });
       }
     };
     window.addEventListener("agendamento-criado", handleAgendamentoCriado);
     return () => window.removeEventListener("agendamento-criado", handleAgendamentoCriado);
-  }, []);
+  }, [profissional?.servicos]);
 
   const handleAdicionarAgendamento = async (novo: AgendamentoSemana) => {
     // Atualização otimista
@@ -1430,14 +1475,18 @@ function AgendaConteudo() {
     if (!profissional?.id) return;
 
     try {
+      const dataHoraIso = `${novo.data}T${novo.horario}:00Z`;
       const { data, error } = await supabase
         .from("agendamentos")
         .insert({
           empresa_id: profissional.id,
           nome_cliente: novo.nomeCliente,
+          whatsapp_cliente: novo.telefone || "",
+          cliente_telefone: novo.telefone || "",
           servico_nome: novo.servico,
           data: novo.data,
           horario: novo.horario,
+          data_hora_agendamento: dataHoraIso,
           status: novo.status,
         })
         .select()

@@ -29,12 +29,16 @@ export default function AdminLayout() {
     if (!profissional?.id) return;
 
     try {
+      const dataHoraIso = `${novo.data}T${novo.horario}:00Z`;
       const { data, error } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
         nome_cliente: novo.nomeCliente,
+        whatsapp_cliente: novo.telefone || "",
+        cliente_telefone: novo.telefone || "",
         servico_nome: novo.servico,
         data: novo.data,
         horario: novo.horario,
+        data_hora_agendamento: dataHoraIso,
         status: novo.status,
       }).select().single();
 

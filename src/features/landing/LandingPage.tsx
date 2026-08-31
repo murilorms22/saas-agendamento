@@ -164,6 +164,8 @@ function LandingPageConteudo() {
 
   const [salvando, setSalvando] = useState(false);
 
+  const servicoEscolhido = profissional.servicos.find((s) => String(s.id) === String(servicoSelecionado));
+
   const handleEnviar = async (e: React.FormEvent) => {
     e.preventDefault();
     setSalvando(true);
@@ -185,17 +187,35 @@ function LandingPageConteudo() {
         console.warn("Aviso ao cadastrar cliente:", clientErr);
       }
 
-      // 2. Registra o agendamento
-      await supabase.from("agendamentos").insert({
+      // Valida servico_id para ser UUID válido ou null
+      const servicoIdUuid = servicoEscolhido?.id && String(servicoEscolhido.id).includes("-")
+        ? String(servicoEscolhido.id)
+        : null;
+
+      const dataHoraIso = `${dataStr}T${horarioSelecionado ?? "08:00"}:00Z`;
+
+      // 2. Registra o agendamento no Supabase
+      const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
         nome_cliente: nome.trim(),
+        whatsapp_cliente: whatsapp.trim(),
         cliente_telefone: whatsapp.trim(),
-        servico_id: servicoSelecionado,
+        servico_id: servicoIdUuid,
         servico_nome: servicoEscolhido?.nome ?? "Consulta",
         data: dataStr,
         horario: horarioSelecionado ?? "08:00",
+        data_hora_agendamento: dataHoraIso,
         status: "Pendente",
-      });
+      }).select().single();
+
+      if (agError) {
+        console.error("Erro ao salvar agendamento no Supabase:", agError);
+      }
+
+      // Notifica abas / componentes locais em tempo real
+      if (agCriado) {
+        window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: agCriado }));
+      }
     } catch (err) {
       console.error("Erro ao salvar agendamento no Supabase:", err);
     } finally {
@@ -203,8 +223,6 @@ function LandingPageConteudo() {
       setEnviado(true);
     }
   };
-
-  const servicoEscolhido = profissional.servicos.find((s) => s.id === servicoSelecionado);
 
   // Determina qual "estado de overlay" cada card está
   // Card Serviços: começa com cor (centro), quando serviço selecionado → sai (direita)
