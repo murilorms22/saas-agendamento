@@ -69,6 +69,9 @@ interface HorarioDia {
   ativo: boolean;
   inicio: string;
   fim: string;
+  temIntervalo?: boolean;
+  intervaloInicio?: string;
+  intervaloFim?: string;
 }
 
 interface Bloqueio {
@@ -1001,13 +1004,13 @@ interface ConfigurarDisponibilidadeProps {
 
 function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) {
   const [horarios, setHorarios] = useState<Record<DiaSemana, HorarioDia>>({
-    seg: { ativo: true, inicio: "08:00", fim: "18:00" },
-    ter: { ativo: true, inicio: "08:00", fim: "18:00" },
-    qua: { ativo: true, inicio: "08:00", fim: "17:00" },
-    qui: { ativo: true, inicio: "08:00", fim: "18:00" },
-    sex: { ativo: true, inicio: "08:00", fim: "17:00" },
-    sab: { ativo: false, inicio: "09:00", fim: "13:00" },
-    dom: { ativo: false, inicio: "09:00", fim: "12:00" },
+    seg: { ativo: true, inicio: "08:00", fim: "18:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    ter: { ativo: true, inicio: "08:00", fim: "18:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    qua: { ativo: true, inicio: "08:00", fim: "17:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    qui: { ativo: true, inicio: "08:00", fim: "18:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    sex: { ativo: true, inicio: "08:00", fim: "17:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    sab: { ativo: false, inicio: "09:00", fim: "13:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+    dom: { ativo: false, inicio: "09:00", fim: "12:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
   });
 
   const [bloqueios, setBloqueios] = useState<Bloqueio[]>([
@@ -1031,6 +1034,38 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
     setHorarios((prev) => ({
       ...prev,
       [dia]: { ...prev[dia], [campo]: valor },
+    }));
+  };
+
+  const ativarIntervalo = (dia: DiaSemana) => {
+    setHorarios((prev) => ({
+      ...prev,
+      [dia]: {
+        ...prev[dia],
+        temIntervalo: true,
+        intervaloInicio: prev[dia].intervaloInicio || "12:00",
+        intervaloFim: prev[dia].intervaloFim || "13:00",
+      },
+    }));
+  };
+
+  const desativarIntervalo = (dia: DiaSemana) => {
+    setHorarios((prev) => ({
+      ...prev,
+      [dia]: {
+        ...prev[dia],
+        temIntervalo: false,
+      },
+    }));
+  };
+
+  const atualizarIntervalo = (dia: DiaSemana, campo: "intervaloInicio" | "intervaloFim", valor: string) => {
+    setHorarios((prev) => ({
+      ...prev,
+      [dia]: {
+        ...prev[dia],
+        [campo]: valor,
+      },
     }));
   };
 
@@ -1075,7 +1110,7 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
           <div>
             <h3 className="font-display font-bold text-foreground">Horários de Atendimento</h3>
             <p className="text-xs font-body text-muted-foreground">
-              Defina os dias e horários em que você atende
+              Defina os dias, horários e intervalos em que você atende
             </p>
           </div>
         </div>
@@ -1096,7 +1131,7 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
                 <div className="flex items-center gap-3 sm:w-36">
                   <button
                     onClick={() => toggleDia(chave)}
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${
                       dia.ativo ? "bg-primary" : "bg-secondary"
                     }`}
                   >
@@ -1109,27 +1144,91 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
                   <span className="font-body font-bold text-sm text-foreground">{label}</span>
                 </div>
 
-                {/* Inputs de Horário */}
+                {/* Inputs de Horário e Intervalo */}
                 {dia.ativo ? (
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="flex items-center gap-2">
-                      <label className="font-body text-xs text-muted-foreground">Das</label>
-                      <input
-                        type="time"
-                        value={dia.inicio}
-                        onChange={(e) => atualizarHorario(chave, "inicio", e.target.value)}
-                        className="px-3 py-2 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground"
-                      />
+                  <div className="flex flex-wrap items-center justify-between gap-3 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <label className="font-body text-xs text-muted-foreground">Das</label>
+                        <input
+                          type="time"
+                          value={dia.inicio}
+                          onChange={(e) => atualizarHorario(chave, "inicio", e.target.value)}
+                          className="px-3 py-2 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="font-body text-xs text-muted-foreground">às</label>
+                        <input
+                          type="time"
+                          value={dia.fim}
+                          onChange={(e) => atualizarHorario(chave, "fim", e.target.value)}
+                          className="px-3 py-2 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground"
+                        />
+                      </div>
+
+                      {/* Transição animada: botão desce e some -> intervalo surge vindo de cima */}
+                      <AnimatePresence mode="wait">
+                        {!dia.temIntervalo ? (
+                          <motion.button
+                            key={`btn-intervalo-${chave}`}
+                            type="button"
+                            initial={{ opacity: 0, y: -6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 14, transition: { duration: 0.2 } }}
+                            onClick={() => ativarIntervalo(chave)}
+                            className="inline-flex items-center gap-1.5 text-primary hover:text-primary/80 font-body font-bold text-xs transition-all hover:underline cursor-pointer py-1.5 px-2.5 rounded-lg"
+                          >
+                            <Plus size={14} className="stroke-[2.5]" />
+                            <span>Configurar intervalo</span>
+                          </motion.button>
+                        ) : (
+                          <motion.div
+                            key={`bloco-intervalo-${chave}`}
+                            initial={{ opacity: 0, y: -14 }}
+                            animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }}
+                            exit={{ opacity: 0, y: -8, transition: { duration: 0.18 } }}
+                            className="flex items-center gap-2.5"
+                          >
+                            <span className="text-border/80 font-light mx-0.5 hidden sm:inline select-none">|</span>
+                            <label className="font-body text-xs font-bold text-muted-foreground whitespace-nowrap">
+                              Intervalo:
+                            </label>
+                            <input
+                              type="time"
+                              value={dia.intervaloInicio ?? "12:00"}
+                              onChange={(e) => atualizarIntervalo(chave, "intervaloInicio", e.target.value)}
+                              className="px-2.5 py-2 rounded-xl bg-background border border-border font-body text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground shadow-2xs"
+                            />
+                            <span className="font-body text-xs text-muted-foreground">até</span>
+                            <input
+                              type="time"
+                              value={dia.intervaloFim ?? "13:00"}
+                              onChange={(e) => atualizarIntervalo(chave, "intervaloFim", e.target.value)}
+                              className="px-2.5 py-2 rounded-xl bg-background border border-border font-body text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground shadow-2xs"
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <label className="font-body text-xs text-muted-foreground">às</label>
-                      <input
-                        type="time"
-                        value={dia.fim}
-                        onChange={(e) => atualizarHorario(chave, "fim", e.target.value)}
-                        className="px-3 py-2 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground"
-                      />
-                    </div>
+
+                    {/* Na extremidade direita dessa mesma linha: botão para eliminar aquele intervalo */}
+                    <AnimatePresence>
+                      {dia.temIntervalo && (
+                        <motion.button
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          type="button"
+                          onClick={() => desativarIntervalo(chave)}
+                          className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors ml-auto cursor-pointer flex items-center gap-1.5 text-xs font-body font-semibold shrink-0"
+                          title="Eliminar intervalo deste dia"
+                        >
+                          <Trash2 size={15} />
+                          <span className="hidden md:inline">Eliminar intervalo</span>
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
                   </div>
                 ) : (
                   <span className="font-body text-xs text-muted-foreground italic">
