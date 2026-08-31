@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2, Plus } from "lucide-react";
+import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2, Plus, CalendarDays } from "lucide-react";
 import { useProfessional } from "../store/useProfessional";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
 import { supabase } from "../lib/supabase";
 
 const navItems = [
-  { to: "/admin",              label: "Resumo do Dia",            icon: LayoutDashboard, exact: true  },
+  { to: "/admin",              label: "Painel Inicial",           icon: LayoutDashboard, exact: true  },
+  { to: "/admin/resumo",       label: "Resumo do Dia",            icon: CalendarDays,    exact: false },
   { to: "/admin/agenda",       label: "Minha Agenda",             icon: Calendar,        exact: false },
   { to: "/admin/historico",    label: "Histórico",                icon: Users,           exact: false },
   { to: "/admin/configuracoes",label: "Configurações",            icon: Settings,        exact: false },
