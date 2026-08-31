@@ -139,7 +139,7 @@ function DashboardConteudo() {
     return () => window.removeEventListener("agendamento-criado", handleAgendamentoCriado);
   }, []);
 
-  const handleStatus = async (id: string, novoStatus: "Confirmado" | "Cancelado") => {
+  const handleStatus = async (id: string, novoStatus: Status) => {
     // Atualização otimista
     setAgendamentos((prev) =>
       prev.map((ag) => (ag.id === id ? { ...ag, status: novoStatus } : ag))

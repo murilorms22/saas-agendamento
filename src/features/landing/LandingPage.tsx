@@ -27,7 +27,7 @@ import { supabase } from "../../lib/supabase";
 //  Estado inicial (card ativo):   entra pela esquerda
 //  Estado saindo (card inativo):  sai pela direita
 // ─────────────────────────────────────────────────────────────────────────────
-const overlayVariants = {
+const overlayVariants: any = {
   /** Overlay aguardando fora da tela (à esquerda) */
   esquerda: { x: "-100%", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } },
   /** Overlay totalmente visível, cobrindo o card */
@@ -37,7 +37,6 @@ const overlayVariants = {
 };
 
 export default function LandingPage() {
-  const { profissional } = useProfessional();
   return <PageLoader><LandingPageConteudo /></PageLoader>;
 }
 

@@ -20,7 +20,6 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "../lib/supabase";
-import type { EmpresaRow, ServicoRow } from "../lib/supabase";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos públicos (consumidos pelos componentes)

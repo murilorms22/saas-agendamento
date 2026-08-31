@@ -37,6 +37,10 @@ export default function AdminLayout() {
         status: novo.status,
       }).select().single();
 
+      if (error) {
+        console.error("Erro ao salvar agendamento no Supabase:", error);
+      }
+
       const agCriado = {
         ...novo,
         id: data?.id ? String(data.id) : novo.id,

@@ -6,7 +6,7 @@
  *  2. Disponibilidade — configurar horários de atendimento e bloqueios
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   format,
   addDays,
@@ -40,10 +40,7 @@ import {
   Columns,
   CalendarDays,
   ArrowRight,
-  User,
-  Search,
-  Phone,
-  UserCheck,
+  Pencil,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
@@ -1287,13 +1284,11 @@ function AgendaConteudo() {
   const { profissional } = useProfessional();
   const [abaAtiva, setAbaAtiva] = useState<Aba>("calendario");
   const [agendamentos, setAgendamentos] = useState<AgendamentoSemana[]>([]);
-  const [carregando, setCarregando] = useState(true);
 
   // Busca agendamentos reais do Supabase
   useEffect(() => {
     async function carregar() {
       if (!profissional?.id) return;
-      setCarregando(true);
 
       try {
         const { data, error } = await supabase
@@ -1309,8 +1304,6 @@ function AgendaConteudo() {
         }
       } catch (err) {
         console.error("Erro ao carregar agendamentos do Supabase:", err);
-      } finally {
-        setCarregando(false);
       }
     }
 

@@ -118,4 +118,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.log(`[Supabase] Conectando a: ${supabaseUrl}`);
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey);

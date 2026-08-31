@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { X, Search, Phone, UserCheck, Plus, Pencil } from "lucide-react";
+import { X, Search, Phone, UserCheck, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
 
