@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2, Plus, CalendarDays } from "lucide-react";
+import { motion } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
 import { supabase } from "../lib/supabase";
@@ -87,15 +88,17 @@ export default function AdminLayout() {
 
         {/* Botão Novo Agendamento: Primeira coisa na sidebar */}
         <div className="p-4 pb-2">
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => setModalAberto(true)}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group"
+            className="w-full flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all cursor-pointer group"
           >
             <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:rotate-90 duration-200">
               <Plus size={14} className="stroke-[3]" />
             </div>
             <span>Novo agendamento</span>
-          </button>
+          </motion.button>
         </div>
 
         {/* Navegação */}
@@ -103,28 +106,37 @@ export default function AdminLayout() {
           {navItems.map(({ to, label, icon: Icon, exact }) => {
             const active = isActive(to, exact);
             return (
-              <Link
+              <motion.div
                 key={to}
-                to={to}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-body font-semibold text-sm transition-all
-                  ${active
-                    ? "bg-primary text-primary-foreground shadow-soft"
-                    : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                  }`}
+                whileHover={{ x: 3 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <Icon size={18} />
-                {label}
-              </Link>
+                <Link
+                  to={to}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-body font-semibold text-sm transition-all
+                    ${active
+                      ? "bg-primary text-primary-foreground shadow-soft"
+                      : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    }`}
+                >
+                  <Icon size={18} />
+                  {label}
+                </Link>
+              </motion.div>
             );
           })}
         </nav>
 
         {/* Sair */}
         <div className="p-6 border-t border-border/20">
-          <button className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-sm transition-all">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-sm transition-all cursor-pointer"
+          >
             <LogOut size={18} />
             Sair
-          </button>
+          </motion.button>
         </div>
       </aside>
 

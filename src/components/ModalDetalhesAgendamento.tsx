@@ -99,12 +99,14 @@ export function ModalDetalhesAgendamento({
           <span className="text-xs font-body font-bold text-muted-foreground uppercase tracking-wider">
             Detalhes da Consulta
           </span>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
             onClick={onFechar}
             className="w-8 h-8 rounded-full bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X size={16} />
-          </button>
+          </motion.button>
         </div>
 
         {/* Perfil do Paciente */}
@@ -184,21 +186,25 @@ export function ModalDetalhesAgendamento({
         {/* Ações: Confirmar rápida, Editar (Lápis bem visível) e Cancelar */}
         <div className="space-y-2.5 pt-4 border-t border-border/20">
           {/* Botão de Edição Principal com Lápis bem visível e intuitivo */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => {
               onFechar();
               onEditar(agendamento);
             }}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all cursor-pointer group"
           >
             <Pencil size={16} className="transition-transform group-hover:rotate-12" />
             <span>Editar Agendamento</span>
-          </button>
+          </motion.button>
 
           {/* Botões secundários: Confirmar e Cancelar */}
           <div className="flex gap-2">
             {agendamento.status !== "Confirmado" && onAtualizarStatus && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => {
                   onAtualizarStatus(agendamento.id, "Confirmado");
                   onFechar();
@@ -207,16 +213,18 @@ export function ModalDetalhesAgendamento({
               >
                 <CheckCircle2 size={14} />
                 <span>Confirmar</span>
-              </button>
+              </motion.button>
             )}
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setConfirmandoExclusao(true)}
               className="flex-1 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Trash2 size={14} />
               <span>Cancelar Agendamento</span>
-            </button>
+            </motion.button>
           </div>
         </div>
       </motion.div>
@@ -254,20 +262,24 @@ export function ModalDetalhesAgendamento({
               </p>
 
               <div className="flex gap-2.5 mt-5">
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setConfirmandoExclusao(false)}
                   className="flex-1 py-2.5 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-body font-bold text-xs transition-all cursor-pointer"
                 >
                   Voltar
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={handleConfirmarExclusao}
                   className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-body font-bold text-xs shadow-soft transition-all cursor-pointer"
                 >
                   Sim, Excluir
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </div>

@@ -214,12 +214,14 @@ export function ModalNovoAgendamento({
               {agendamentoInicial ? "Atualize as informações da consulta" : "Preencha os dados da consulta"}
             </p>
           </div>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
             onClick={onFechar}
             className="w-8 h-8 rounded-full bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X size={16} />
-          </button>
+          </motion.button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -371,8 +373,10 @@ export function ModalNovoAgendamento({
               Status Inicial
             </label>
             <div className="flex gap-2">
-              <button
+              <motion.button
                 type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setStatus("Confirmado")}
                 className={`flex-1 py-2 rounded-xl text-xs font-body font-bold transition-all border cursor-pointer ${
                   status === "Confirmado"
@@ -381,9 +385,11 @@ export function ModalNovoAgendamento({
                 }`}
               >
                 Confirmado
-              </button>
-              <button
+              </motion.button>
+              <motion.button
                 type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setStatus("Pendente")}
                 className={`flex-1 py-2 rounded-xl text-xs font-body font-bold transition-all border cursor-pointer ${
                   status === "Pendente"
@@ -392,24 +398,28 @@ export function ModalNovoAgendamento({
                 }`}
               >
                 Pendente
-              </button>
+              </motion.button>
             </div>
           </div>
 
           <div className="flex gap-3 pt-4 border-t border-border/20 mt-6">
-            <button
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={onFechar}
               className="flex-1 py-2.5 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-body font-bold text-xs transition-all cursor-pointer"
             >
               Cancelar
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="submit"
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
               className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 font-body font-bold text-xs shadow-soft transition-all cursor-pointer"
             >
               {agendamentoInicial ? "Salvar Alterações" : "Salvar Agendamento"}
-            </button>
+            </motion.button>
           </div>
         </form>
       </motion.div>

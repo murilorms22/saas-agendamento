@@ -457,7 +457,9 @@ function VisualizadorAgenda({
         <div className="flex items-center gap-3 self-end md:self-center">
           {/* Seletor Dia / Semana / Mês */}
           <div className="flex items-center bg-secondary/50 p-1 rounded-xl border border-border/30">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setModo("dia")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "dia"
@@ -467,8 +469,10 @@ function VisualizadorAgenda({
             >
               <Clock size={14} />
               Dia (Hora a hora)
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setModo("semana")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "semana"
@@ -478,8 +482,10 @@ function VisualizadorAgenda({
             >
               <Columns size={14} />
               Semana
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setModo("mes")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "mes"
@@ -489,31 +495,37 @@ function VisualizadorAgenda({
             >
               <LayoutGrid size={14} />
               Mês
-            </button>
+            </motion.button>
           </div>
 
           {/* Navegação Prev / Hoje / Next */}
           <div className="flex gap-1.5 items-center">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
               onClick={navegarAnterior}
               aria-label="Anterior"
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-secondary/50 hover:bg-secondary text-foreground transition-colors cursor-pointer"
             >
               <ChevronLeft size={16} />
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.94 }}
               onClick={irParaHoje}
               className="px-3.5 py-1.5 rounded-xl bg-primary/10 text-primary font-body font-bold text-xs hover:bg-primary/20 transition-colors cursor-pointer"
             >
               Hoje
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
               onClick={navegarProximo}
               aria-label="Próximo"
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-secondary/50 hover:bg-secondary text-foreground transition-colors cursor-pointer"
             >
               <ChevronRight size={16} />
-            </button>
+            </motion.button>
           </div>
         </div>
       </div>
@@ -1297,14 +1309,16 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
               onKeyDown={(e) => e.key === "Enter" && adicionarBloqueio()}
               className="flex-1 px-4 py-3 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted-foreground/50 text-foreground"
             />
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
               onClick={adicionarBloqueio}
               disabled={!novoBloqueioData || !novoBloqueioMotivo.trim()}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none shrink-0"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none shrink-0 cursor-pointer"
             >
               <Plus size={16} />
               Adicionar
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -1365,10 +1379,12 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
           <p className="font-body text-xs text-muted-foreground">
             As alterações serão aplicadas imediatamente após salvar.
           </p>
-          <button
+          <motion.button
+            whileHover={salvando ? {} : { scale: 1.03, y: -2 }}
+            whileTap={salvando ? {} : { scale: 0.97 }}
             onClick={salvar}
             disabled={salvando}
-            className={`flex items-center gap-2 px-8 py-3 rounded-xl font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all
+            className={`flex items-center gap-2 px-8 py-3 rounded-xl font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all cursor-pointer
               ${salvo
                 ? "bg-emerald-500 text-white"
                 : "bg-primary text-primary-foreground"
@@ -1383,7 +1399,7 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
             )}
             {salvo && <CheckCircle2 size={16} />}
             {salvando ? "Salvando..." : salvo ? "Salvo com sucesso!" : "Salvar Configurações"}
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>
@@ -1556,35 +1572,58 @@ function AgendaConteudo() {
     <div className="space-y-8 pb-12">
       {/* Cabeçalho da Página com ação na extrema direita */}
       <header className="border-b border-border/20 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-display font-bold tracking-tight text-foreground">
-            {abaAtiva === "calendario" ? "Minha Agenda" : "Disponibilidade"}
-          </h1>
-          <p className="text-muted-foreground font-body text-sm font-medium mt-1">
-            {abaAtiva === "calendario"
-              ? "Visualize e gerencie seus agendamentos por semana ou mês"
-              : "Defina seus horários de atendimento semanal e bloqueios de datas"}
-          </p>
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`header-title-${abaAtiva}`}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }}
+            exit={{ opacity: 0, y: 10, transition: { duration: 0.2 } }}
+          >
+            <h1 className="text-4xl font-display font-bold tracking-tight text-foreground">
+              {abaAtiva === "calendario" ? "Minha Agenda" : "Disponibilidade"}
+            </h1>
+            <p className="text-muted-foreground font-body text-sm font-medium mt-1">
+              {abaAtiva === "calendario"
+                ? "Visualize e gerencie seus agendamentos por semana ou mês"
+                : "Defina seus horários de atendimento semanal e bloqueios de datas"}
+            </p>
+          </motion.div>
+        </AnimatePresence>
 
-        {/* Ação na extrema direita: cor primária do profissional, sem fundo */}
-        {abaAtiva === "calendario" ? (
-          <button
-            onClick={() => setAbaAtiva("disponibilidade")}
-            className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-body font-bold text-sm transition-all hover:underline self-start sm:self-center py-2 cursor-pointer"
-          >
-            <Settings2 size={18} />
-            Configurar disponibilidade
-          </button>
-        ) : (
-          <button
-            onClick={() => setAbaAtiva("calendario")}
-            className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-body font-bold text-sm transition-all hover:underline self-start sm:self-center py-2 cursor-pointer"
-          >
-            <Calendar size={18} />
-            Voltar para a agenda
-          </button>
-        )}
+        {/* Ação na extrema direita: animada igual ao intervalo (desce e some / surge vindo de cima) */}
+        <AnimatePresence mode="wait">
+          {abaAtiva === "calendario" ? (
+            <motion.button
+              key="btn-configurar-disponibilidade"
+              type="button"
+              initial={{ opacity: 0, y: -14 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }}
+              exit={{ opacity: 0, y: 14, transition: { duration: 0.2 } }}
+              whileHover={{ y: -2, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setAbaAtiva("disponibilidade")}
+              className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-body font-bold text-sm transition-colors hover:underline self-start sm:self-center py-2 px-3 rounded-xl hover:bg-primary/5 cursor-pointer"
+            >
+              <Settings2 size={18} />
+              <span>Configurar disponibilidade</span>
+            </motion.button>
+          ) : (
+            <motion.button
+              key="btn-minha-agenda"
+              type="button"
+              initial={{ opacity: 0, y: -14 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }}
+              exit={{ opacity: 0, y: 14, transition: { duration: 0.2 } }}
+              whileHover={{ y: -2, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setAbaAtiva("calendario")}
+              className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-body font-bold text-sm transition-colors hover:underline self-start sm:self-center py-2 px-3 rounded-xl hover:bg-primary/5 cursor-pointer"
+            >
+              <Calendar size={18} />
+              <span>Minha agenda</span>
+            </motion.button>
+          )}
+        </AnimatePresence>
       </header>
 
       {/* Conteúdo da Aba */}

@@ -351,13 +351,15 @@ function DashboardConteudo() {
 
                   {/* Rodapé do card: ações e em baixo na direita horário + ícone de status */}
                   <div className="flex items-center justify-between pt-3 border-t border-border/20 mt-auto gap-2">
-                    <button
+                    <motion.button
                       type="button"
+                      whileHover={{ x: 2 }}
+                      whileTap={{ scale: 0.96 }}
                       onClick={() => handleEditar(agendamento)}
                       className="text-xs font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       Detalhes / Editar
-                    </button>
+                    </motion.button>
 
                     {/* Em baixo na direita, ao lado do horário */}
                     <div className="flex items-center gap-2 ml-auto">
@@ -382,18 +384,22 @@ function DashboardConteudo() {
                         exit={{ height: 0, opacity: 0, marginTop: 0 }}
                         className="flex gap-3 overflow-hidden"
                       >
-                        <button
+                        <motion.button
+                          whileHover={{ scale: 1.02, y: -1 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() => handleStatus(agendamento.id, "Confirmado")}
-                          className="flex-1 py-3 rounded-xl font-body font-semibold text-sm bg-primary text-primary-foreground shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          className="flex-1 py-3 rounded-xl font-body font-semibold text-sm bg-primary text-primary-foreground shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <Check size={18} /> Confirmar
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() => setAgendamentoDetalhes(agendamento)}
                           className="flex-1 py-3 rounded-xl font-body font-semibold text-sm bg-secondary text-foreground hover:bg-destructive hover:text-destructive-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <X size={18} /> Cancelar
-                        </button>
+                        </motion.button>
                       </motion.div>
                     )}
                   </AnimatePresence>
