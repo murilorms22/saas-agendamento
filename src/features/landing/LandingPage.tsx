@@ -86,8 +86,10 @@ function LandingPageConteudo() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Carrega automaticamente dados do paciente se ele já estiver autenticado
+  // Escuta de Sessão no Mount: reconhece automaticamente o paciente para esta clínica
   useEffect(() => {
+    let ativo = true;
+
     async function carregarClienteAutenticado() {
       if (!user?.id || !profissional?.id) {
         setClienteLogado(null);
@@ -102,20 +104,27 @@ function LandingPageConteudo() {
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
+        if (!ativo) return;
+
         if (cliente) {
           setClienteLogado(cliente);
           if (cliente.nome) setNome(cliente.nome);
           if (cliente.telefone) setWhatsapp(mascararTelefone(cliente.telefone));
-        } else if (user.user_metadata?.full_name || user.user_metadata?.phone) {
-          if (user.user_metadata.full_name) setNome(user.user_metadata.full_name);
-          if (user.user_metadata.phone) setWhatsapp(mascararTelefone(user.user_metadata.phone));
+        } else {
+          // Edge Case: Usuário logado no Auth, mas não cadastrado como cliente nesta clínica
+          setClienteLogado(null);
         }
       } catch (err) {
         console.error("[LandingPage] Erro ao carregar paciente autenticado:", err);
+        if (ativo) setClienteLogado(null);
       }
     }
 
     carregarClienteAutenticado();
+
+    return () => {
+      ativo = false;
+    };
   }, [user?.id, profissional?.id]);
 
   // Busca em tempo real os horários já agendados para a data selecionada
@@ -309,12 +318,13 @@ function LandingPageConteudo() {
   const handleContinuar = () => {
     if (!servicoSelecionado || !dataSelecionada || !horarioSelecionado) return;
 
-    // 🛡️ Se o paciente não estiver logado, intercepta com o modal de login/cadastro
-    if (!user) {
+    // 🛡️ Se o paciente não tiver registro de cliente nesta clínica, abre o modal de autenticação
+    if (!clienteLogado) {
       setModalAuthAberto(true);
       return;
     }
 
+    // Com o clienteLogado reconhecido, contorna totalmente o modal e vai para a confirmação direta
     setEtapa("formulario");
   };
 
@@ -334,8 +344,8 @@ function LandingPageConteudo() {
     e.preventDefault();
     if (salvando) return; // 🛡️ Brecha 3: Bloqueio instantâneo contra Race Condition
 
-    // 🛡️ Se o usuário não estiver logado, intercepta com o modal
-    if (!user) {
+    // 🛡️ Se não houver cliente logado para esta clínica, abre o modal
+    if (!clienteLogado) {
       setModalAuthAberto(true);
       return;
     }
@@ -343,43 +353,26 @@ function LandingPageConteudo() {
     setSalvando(true);
 
     try {
+      const nomeEfetivo = clienteLogado.nome || nome;
+      const telefoneEfetivo = clienteLogado.telefone || whatsapp;
+
       // 🛡️ Brecha 2: Sanitização estrita anti-XSS e anti-CSV Injection
-      const nomeSanitizado = sanitizarTexto(nome);
-      const telefoneSanitizado = sanitizarTelefone(whatsapp);
+      const nomeSanitizado = sanitizarTexto(nomeEfetivo);
+      const telefoneSanitizado = sanitizarTelefone(telefoneEfetivo);
 
       if (!nomeSanitizado || nomeSanitizado.length < 2) {
-        alert("Por favor, digite seu nome completo (mínimo de 2 caracteres).");
+        exibirToast("Nome do paciente incompleto. Por favor, atualize seus dados.", "error");
         setSalvando(false);
         return;
       }
 
       if (!telefoneSanitizado || telefoneSanitizado.length < 10) {
-        alert("Por favor, digite um número de WhatsApp válido com DDD.");
+        exibirToast("WhatsApp do paciente incompleto. Por favor, atualize seus dados.", "error");
         setSalvando(false);
         return;
       }
 
       const dataStr = format(dataSelecionada, "yyyy-MM-dd");
-
-      // 1. Cadastra ou atualiza o cliente na base de clientes do profissional
-      let clienteIdEfetivo = clienteLogado?.id;
-      try {
-        const { data: clienteAtualizado } = await supabase.from("clientes").upsert(
-          {
-            empresa_id: profissional.id,
-            nome: nomeSanitizado,
-            telefone: telefoneSanitizado,
-            auth_user_id: user.id,
-          },
-          { onConflict: "empresa_id,telefone" }
-        ).select().single();
-
-        if (clienteAtualizado?.id) {
-          clienteIdEfetivo = clienteAtualizado.id;
-        }
-      } catch (clientErr) {
-        console.warn("Aviso ao atualizar cliente:", clientErr);
-      }
 
       // Valida servico_id para ser UUID válido ou null
       const servicoIdUuid = servicoEscolhido?.id && String(servicoEscolhido.id).includes("-")
@@ -409,10 +402,10 @@ function LandingPageConteudo() {
         return;
       }
 
-      // 2. 🛡️ Brecha 4: Registra o agendamento no Supabase vinculado ao ID do cliente autenticado
+      // 2. 🛡️ Dispara a função de insert diretamente vinculada ao clienteLogado.id
       const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
-        cliente_id: clienteIdEfetivo ?? null, // Vínculo estrito com o cliente autenticado
+        cliente_id: clienteLogado.id, // Vínculo direto e estrito com o paciente reconhecido
         nome_cliente: nomeSanitizado,
         whatsapp_cliente: telefoneSanitizado,
         cliente_telefone: telefoneSanitizado,
@@ -842,9 +835,9 @@ function LandingPageConteudo() {
                   <ArrowLeft size={18} />
                 </button>
 
-                <div className="text-center mt-10 mb-10">
+                <div className="text-center mt-10 mb-8">
                   <h2 className="text-3xl font-display font-extrabold text-foreground mb-4">
-                    Confirme seus dados
+                    Confirme seu agendamento
                   </h2>
                   <div className="inline-flex flex-col md:flex-row bg-primary/5 border border-primary/10 rounded-2xl p-4 gap-4 items-center justify-center text-left mx-auto">
                     <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
@@ -861,20 +854,28 @@ function LandingPageConteudo() {
                   </div>
                 </div>
 
-                {/* 🛡️ Paciente Autenticado */}
-                {user && (
-                  <div className="flex items-center justify-between p-3.5 mb-6 rounded-2xl bg-primary/5 border border-primary/15 text-xs font-body max-w-md mx-auto">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold shrink-0">
-                        {clienteLogado?.nome ? clienteLogado.nome.charAt(0).toUpperCase() : <User size={14} />}
+                {/* 🛡️ Card / Badge Suave: Reconhecimento Automático do Paciente */}
+                {clienteLogado && (
+                  <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl bg-secondary/50 border border-border/70 shadow-soft flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-base shrink-0">
+                        {clienteLogado.nome ? clienteLogado.nome.charAt(0).toUpperCase() : <User size={18} />}
                       </div>
-                      <div className="truncate">
-                        <p className="font-bold text-foreground truncate">
-                          {clienteLogado?.nome || user.user_metadata?.full_name || "Paciente Autenticado"}
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-body uppercase font-bold tracking-wider text-muted-foreground">
+                          Agendando como
                         </p>
-                        <p className="text-muted-foreground text-[11px] truncate">{user.email}</p>
+                        <p className="font-display font-bold text-foreground text-sm truncate">
+                          {clienteLogado.nome}
+                        </p>
+                        {clienteLogado.telefone && (
+                          <p className="font-body text-xs text-muted-foreground truncate">
+                            {mascararTelefone(clienteLogado.telefone)}
+                          </p>
+                        )}
                       </div>
                     </div>
+
                     <button
                       type="button"
                       onClick={async () => {
@@ -884,50 +885,55 @@ function LandingPageConteudo() {
                         setWhatsapp("");
                         setEtapa("selecao");
                       }}
-                      title="Sair desta conta"
-                      className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1 rounded-lg hover:bg-destructive/10 shrink-0 flex items-center gap-1.5 cursor-pointer"
+                      title="Sair / Trocar conta"
+                      className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors px-3 py-1.5 rounded-xl hover:bg-destructive/10 shrink-0 flex items-center gap-1.5 cursor-pointer border border-border/50 hover:border-destructive/30"
                     >
                       <LogOut size={13} />
-                      Trocar conta
+                      <span>Sair / Trocar conta</span>
                     </button>
                   </div>
                 )}
 
                 <form onSubmit={handleEnviar} className="space-y-5 max-w-md mx-auto">
-                  <div className="space-y-1.5">
-                    <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Nome Completo
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      placeholder="Seu nome completo"
-                      className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    />
-                  </div>
+                  {/* Se NÃO houver clienteLogado reconhecido, pede os dados como fallback */}
+                  {!clienteLogado && (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          Nome Completo
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={nome}
+                          onChange={(e) => setNome(e.target.value)}
+                          placeholder="Seu nome completo"
+                          className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                        />
+                      </div>
 
-                  <div className="space-y-1.5">
-                    <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      WhatsApp
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={whatsapp}
-                      onChange={(e) => setWhatsapp(mascararTelefone(e.target.value))}
-                      placeholder="(11) 99999-9999"
-                      maxLength={15}
-                      inputMode="numeric"
-                      className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    />
-                  </div>
+                      <div className="space-y-1.5">
+                        <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          WhatsApp
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={whatsapp}
+                          onChange={(e) => setWhatsapp(mascararTelefone(e.target.value))}
+                          placeholder="(11) 99999-9999"
+                          maxLength={15}
+                          inputMode="numeric"
+                          className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <button
                     type="submit"
                     disabled={salvando}
-                    className={`w-full bg-primary text-primary-foreground py-4 rounded-xl font-body font-bold text-base shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all mt-8 cursor-pointer ${
+                    className={`w-full bg-primary text-primary-foreground py-4 rounded-xl font-body font-bold text-base shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer ${
                       salvando ? "opacity-70 cursor-not-allowed transform-none" : ""
                     }`}
                   >
