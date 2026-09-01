@@ -14,7 +14,7 @@ import {
   startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, X, User, LogOut } from "lucide-react";
+import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, AlertTriangle, X, User, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
@@ -67,6 +67,24 @@ function LandingPageConteudo() {
   // Trava de Segurança: Horários já reservados
   const [horariosOcupados, setHorariosOcupados] = useState<string[]>([]);
   const [erroConflito, setErroConflito] = useState<string | null>(null);
+
+  // Alerta Visual (Toast de Warning / Erro)
+  const [toast, setToast] = useState<{
+    tipo: "warning" | "error" | "info";
+    mensagem: string;
+  } | null>(null);
+
+  const exibirToast = (mensagem: string, tipo: "warning" | "error" | "info" = "warning") => {
+    setToast({ tipo, mensagem });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Carrega automaticamente dados do paciente se ele já estiver autenticado
   useEffect(() => {
@@ -381,7 +399,10 @@ function LandingPageConteudo() {
         .limit(1);
 
       if (conflitos && conflitos.length > 0) {
-        setErroConflito("Este horário já foi preenchido por outro agendamento. Por favor, escolha outro horário disponível.");
+        exibirToast(
+          "Este horário já foi preenchido por outro agendamento. Por favor, escolha outro horário disponível.",
+          "warning"
+        );
         setSalvando(false);
         setEtapa("selecao");
         setHorarioSelecionado(null);
@@ -405,7 +426,23 @@ function LandingPageConteudo() {
 
       if (agError) {
         console.error("Erro ao salvar agendamento no Supabase:", agError);
-        alert("Erro ao confirmar agendamento. Por favor, tente novamente.");
+
+        // Verifica se a trigger disparou o erro de limite máximo de 3 agendamentos
+        const textoErro = `${agError.message || ""} ${agError.details || ""} ${agError.hint || ""}`;
+        const ehLimiteMaximo = /limite m[aá]ximo de 3 agendamentos/i.test(textoErro);
+
+        if (ehLimiteMaximo) {
+          exibirToast(
+            "Você já possui 3 agendamentos ativos. Aguarde a finalização de uma consulta para agendar novamente.",
+            "warning"
+          );
+        } else {
+          exibirToast(
+            agError.message || "Erro ao confirmar agendamento. Por favor, tente novamente.",
+            "error"
+          );
+        }
+
         setSalvando(false);
         return;
       }
@@ -417,8 +454,22 @@ function LandingPageConteudo() {
 
       setSalvando(false);
       setEnviado(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar agendamento no Supabase:", err);
+      const textoErro = `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`;
+      const ehLimiteMaximo = /limite m[aá]ximo de 3 agendamentos/i.test(textoErro);
+
+      if (ehLimiteMaximo) {
+        exibirToast(
+          "Você já possui 3 agendamentos ativos. Aguarde a finalização de uma consulta para agendar novamente.",
+          "warning"
+        );
+      } else {
+        exibirToast(
+          "Ocorreu um erro inesperado ao confirmar o agendamento. Tente novamente.",
+          "error"
+        );
+      }
       setSalvando(false);
     }
   };
@@ -942,6 +993,67 @@ function LandingPageConteudo() {
           nomeClinica={profissional.nomeClinica}
           onSucesso={handleAuthSucesso}
         />
+
+        {/* ── Toast de Alerta Visual (Trigger de Limite / Erros) ── */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -25, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.96 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className={`fixed top-6 right-4 sm:right-8 z-50 max-w-md w-[calc(100%-2rem)] p-4 rounded-2xl shadow-floating border backdrop-blur-md flex items-start gap-3.5 ${
+                toast.tipo === "warning"
+                  ? "bg-amber-50/95 border-amber-300/80 text-amber-950 shadow-amber-500/10"
+                  : toast.tipo === "error"
+                  ? "bg-rose-50/95 border-rose-300/80 text-rose-950 shadow-rose-500/10"
+                  : "bg-card/95 border-border/80 text-foreground"
+              }`}
+            >
+              <div
+                className={`p-2 rounded-xl shrink-0 ${
+                  toast.tipo === "warning"
+                    ? "bg-amber-500/20 text-amber-700"
+                    : toast.tipo === "error"
+                    ? "bg-rose-500/20 text-rose-700"
+                    : "bg-primary/20 text-primary"
+                }`}
+              >
+                {toast.tipo === "warning" ? (
+                  <AlertTriangle size={20} className="stroke-[2.2]" />
+                ) : (
+                  <AlertCircle size={20} className="stroke-[2.2]" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0 pt-0.5">
+                <h4
+                  className={`font-display font-bold text-xs uppercase tracking-wider mb-1 ${
+                    toast.tipo === "warning"
+                      ? "text-amber-800"
+                      : toast.tipo === "error"
+                      ? "text-rose-800"
+                      : "text-primary"
+                  }`}
+                >
+                  {toast.tipo === "warning" ? "Aviso de Limite de Consultas" : "Aviso do Sistema"}
+                </h4>
+                <p className="font-body text-xs sm:text-sm leading-relaxed font-medium">
+                  {toast.mensagem}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Fechar aviso"
+              >
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
