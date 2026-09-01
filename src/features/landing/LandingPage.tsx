@@ -606,28 +606,11 @@ function FluxoAgendamentoConteudo() {
         )}
       </AnimatePresence>
 
-      {/* ── Stepper com Linha do Tempo (FORA do card, no topo com bom espaçamento abaixo da navbar) ── */}
+      {/* ── Stepper com Linha do Tempo (Centrado com precisão matemática, sem extrapolar) ── */}
       {!sucessoFinal && (
-        <div className="w-full max-w-2xl mx-auto pt-6 sm:pt-8 pb-8 px-4">
-          <div className="relative flex items-center justify-between">
-            {/* Linha de Fundo */}
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-border/60 rounded-full -z-0" />
-            {/* Linha de Progresso Colorida Preenchida */}
-            <motion.div
-              className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full -z-0 transition-all duration-400"
-              animate={{
-                width:
-                  passoAtual === 1
-                    ? "0%"
-                    : passoAtual === 2
-                    ? "33.3%"
-                    : passoAtual === 3
-                    ? "66.6%"
-                    : "100%",
-              }}
-            />
-
-            {ETAPAS.map((etapa) => {
+        <div className="w-full max-w-2xl mx-auto pt-6 sm:pt-8 pb-14 px-6 sm:px-10">
+          <div className="flex items-center w-full">
+            {ETAPAS.map((etapa, index) => {
               const concluida = etapa.numero < passoAtual;
               const ativa = etapa.numero === passoAtual;
               const Icone = etapa.icone;
@@ -635,35 +618,55 @@ function FluxoAgendamentoConteudo() {
               return (
                 <div
                   key={etapa.numero}
-                  className="flex flex-col items-center relative z-10 cursor-pointer group"
-                  onClick={() => {
-                    // Permite navegar para trás clicando na bolinha
-                    if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
-                  }}
+                  className="flex items-center flex-1 last:flex-none"
                 >
-                  <motion.div
-                    animate={{ scale: ativa ? 1.15 : 1 }}
-                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft ${
-                      concluida
-                        ? "bg-primary text-primary-foreground"
-                        : ativa
-                        ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
-                        : "bg-card text-muted-foreground border-2 border-border/70"
-                    }`}
-                  >
-                    {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
-                  </motion.div>
-                  <span
-                    className={`mt-2.5 font-body text-[11px] sm:text-xs font-bold transition-colors text-center hidden sm:block ${
-                      ativa
-                        ? "text-primary font-extrabold"
-                        : concluida
-                        ? "text-foreground font-semibold"
-                        : "text-muted-foreground font-medium"
-                    }`}
-                  >
-                    {etapa.numero}. {etapa.label}
-                  </span>
+                  {/* Círculo com Label Flutuante */}
+                  <div className="relative flex flex-col items-center">
+                    <motion.button
+                      type="button"
+                      animate={{ scale: ativa ? 1.15 : 1 }}
+                      onClick={() => {
+                        if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
+                      }}
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft shrink-0 ${
+                        concluida
+                          ? "bg-primary text-primary-foreground cursor-pointer"
+                          : ativa
+                          ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
+                          : "bg-card text-muted-foreground border-2 border-border/70 cursor-default"
+                      }`}
+                      title={concluida ? `Voltar para etapa ${etapa.numero}` : etapa.label}
+                    >
+                      {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
+                    </motion.button>
+
+                    {/* Texto da Etapa (Centralizado com precisão abaixo do círculo) */}
+                    <span
+                      className={`absolute top-full mt-2.5 font-body text-[11px] sm:text-xs whitespace-nowrap transition-colors select-none ${
+                        ativa
+                          ? "text-primary font-extrabold"
+                          : concluida
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground font-medium"
+                      }`}
+                    >
+                      {etapa.numero}. {etapa.label}
+                    </span>
+                  </div>
+
+                  {/* Linha conectora entre este círculo e o próximo (não renderiza após a última bolinha) */}
+                  {index < ETAPAS.length - 1 && (
+                    <div className="flex-1 h-1 bg-border/60 mx-2 sm:mx-3 rounded-full overflow-hidden relative">
+                      <motion.div
+                        className="h-full bg-primary rounded-full"
+                        initial={false}
+                        animate={{
+                          width: passoAtual > etapa.numero ? "100%" : "0%",
+                        }}
+                        transition={{ duration: 0.35, ease: "easeInOut" }}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
