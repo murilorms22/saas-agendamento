@@ -189,6 +189,116 @@ function FluxoAgendamentoConteudo() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // ── Session Guard: Chaves e Métodos de Preservação no sessionStorage ──
+  const STORAGE_KEYS = {
+    SERVICO: "facil_servico",
+    DATA: "facil_data",
+    HORARIO: "facil_horario",
+    PASSO: "facil_passo",
+  };
+
+  const salvarNoSession = (chave: string, valor: any) => {
+    try {
+      if (valor === null || valor === undefined) {
+        sessionStorage.removeItem(chave);
+      } else {
+        sessionStorage.setItem(chave, typeof valor === "string" ? valor : JSON.stringify(valor));
+      }
+    } catch (e) {
+      console.warn("[LandingPage] Falha ao gravar no sessionStorage:", e);
+    }
+  };
+
+  const lerDoSession = (chave: string): any => {
+    try {
+      const item = sessionStorage.getItem(chave);
+      if (!item) return null;
+      try {
+        return JSON.parse(item);
+      } catch {
+        return item;
+      }
+    } catch {
+      return null;
+    }
+  };
+
+  const limparSessionGuard = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEYS.SERVICO);
+      sessionStorage.removeItem(STORAGE_KEYS.DATA);
+      sessionStorage.removeItem(STORAGE_KEYS.HORARIO);
+      sessionStorage.removeItem(STORAGE_KEYS.PASSO);
+    } catch (e) {
+      console.warn("[LandingPage] Falha ao limpar sessionStorage:", e);
+    }
+  };
+
+  const navegarParaPasso = (etapa: EtapaFluxo) => {
+    setPassoAtual(etapa);
+    salvarNoSession(STORAGE_KEYS.PASSO, etapa);
+  };
+
+  const handleSelecionarServico = (servico: Servico) => {
+    setServicoEscolhido(servico);
+    salvarNoSession(STORAGE_KEYS.SERVICO, servico);
+  };
+
+  const handleSelecionarData = (dia: Date) => {
+    setDataSelecionada(dia);
+    salvarNoSession(STORAGE_KEYS.DATA, dia.toISOString());
+    setHorarioSelecionado(null);
+    salvarNoSession(STORAGE_KEYS.HORARIO, null);
+  };
+
+  const handleSelecionarHorario = (slot: string) => {
+    setHorarioSelecionado(slot);
+    salvarNoSession(STORAGE_KEYS.HORARIO, slot);
+  };
+
+  // ── Session Guard: Restauração no carregamento inicial da página ──
+  useEffect(() => {
+    try {
+      const servicoSalvo = lerDoSession(STORAGE_KEYS.SERVICO);
+      const dataSalva = lerDoSession(STORAGE_KEYS.DATA);
+      const horarioSalvo = lerDoSession(STORAGE_KEYS.HORARIO);
+      const passoSalvo = Number(lerDoSession(STORAGE_KEYS.PASSO) || 0);
+
+      let temServico = false;
+      if (servicoSalvo && servicoSalvo.id) {
+        const encontrado = profissional.servicos.find((s) => s.id === servicoSalvo.id) || servicoSalvo;
+        setServicoEscolhido(encontrado);
+        temServico = true;
+      }
+
+      let temData = false;
+      if (dataSalva) {
+        const parsed = new Date(dataSalva);
+        if (!isNaN(parsed.getTime())) {
+          setDataSelecionada(parsed);
+          setMesAtual(startOfMonth(parsed));
+          temData = true;
+        }
+      }
+
+      let temHorario = false;
+      if (horarioSalvo && typeof horarioSalvo === "string") {
+        setHorarioSelecionado(horarioSalvo);
+        temHorario = true;
+      }
+
+      // Se temos serviço, data e horário restaurados:
+      if (temServico && temData && temHorario) {
+        const etapaDestino = (user?.id || clienteLogado) ? 4 : 3;
+        setPassoAtual(passoSalvo >= 3 ? (passoSalvo as EtapaFluxo) : etapaDestino);
+      } else if (temServico) {
+        setPassoAtual(2);
+      }
+    } catch (err) {
+      console.warn("[LandingPage] Erro ao restaurar session guard:", err);
+    }
+  }, [profissional?.servicos]);
+
   // ── Reconhecimento Automático de Sessão do Paciente ──
   useEffect(() => {
     let ativo = true;
@@ -216,7 +326,14 @@ function FluxoAgendamentoConteudo() {
           if (cliente.cpf) setCadCpf(mascararCPF(cliente.cpf));
           if (cliente.email) setCadEmail(cliente.email);
         } else {
-          setClienteLogado(null);
+          setClienteLogado({
+            id: user.id,
+            empresa_id: profissional.id,
+            nome: user.user_metadata?.full_name || "Paciente",
+            telefone: user.user_metadata?.telefone || "",
+            email: user.email,
+            auth_user_id: user.id,
+          });
         }
       } catch (err) {
         console.error("[LandingPage] Erro ao buscar dados do paciente:", err);
@@ -393,7 +510,7 @@ function FluxoAgendamentoConteudo() {
       };
 
       setClienteLogado(clienteFinal);
-      setPassoAtual(4); // Avança direto para a confirmação
+      navegarParaPasso(4); // Avança magicamente direto para a confirmação
     } catch (err) {
       console.error("[LandingPage] Erro no login:", err);
       exibirToast("Erro de conexão ao autenticar.", "error");
@@ -489,7 +606,7 @@ function FluxoAgendamentoConteudo() {
       };
 
       setClienteLogado(clienteFinal);
-      setPassoAtual(4); // Avança direto para a confirmação
+      navegarParaPasso(4); // Avança magicamente direto para a confirmação
     } catch (err) {
       console.error("[LandingPage] Erro inesperado ao cadastrar:", err);
       exibirToast("Erro de conexão ao processar cadastro.", "error");
@@ -498,11 +615,64 @@ function FluxoAgendamentoConteudo() {
     }
   };
 
-  // ── Etapa 4: Finalização do Agendamento ──
+  // ── Logout e Troca de Conta Preservando as Escolhas (Etapa 3) ──
+  const handleTrocarConta = async () => {
+    try {
+      setSalvando(true);
+      await signOut();
+      setClienteLogado(null);
+      setLoginEmail("");
+      setLoginSenha("");
+      setCadNome("");
+      setCadWhatsapp("");
+      setCadCpf("");
+      setCadEmail("");
+      setCadSenha("");
+      // Permanece estritamente na Etapa 3 com as escolhas (serviço, data, hora) intactas
+      navegarParaPasso(3);
+    } catch (e) {
+      console.error("[LandingPage] Erro ao trocar de conta:", e);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // ── Etapa 4: Finalização Segura do Agendamento (Red Team Protected) ──
   const handleConfirmarAgendamento = async () => {
-    if (!servicoEscolhido || !dataSelecionada || !horarioSelecionado || !clienteLogado) {
+    if (!servicoEscolhido || !dataSelecionada || !horarioSelecionado) {
       exibirToast("Dados incompletos para confirmar o agendamento.", "error");
+      navegarParaPasso(1);
       return;
+    }
+
+    // 🛡️ Red Team: Obtém o usuário autenticado atual diretamente do Supabase Auth
+    // garantindo que cliente_id pertença estritamente ao usuário real autenticado na sessão
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+
+    if (!currentUser) {
+      exibirToast("Sua sessão expirou. Identifique-se para confirmar sua consulta.", "warning");
+      navegarParaPasso(3);
+      return;
+    }
+
+    // Busca ou garante registro na tabela 'clientes' vinculado ao auth_user_id
+    let clienteIdParaInsert = currentUser.id;
+    let clienteNome = currentUser.user_metadata?.full_name || clienteLogado?.nome || "Paciente";
+    let clienteTel = currentUser.user_metadata?.telefone || clienteLogado?.telefone || "";
+
+    const { data: clienteBanco } = await supabase
+      .from("clientes")
+      .select("id, nome, telefone")
+      .eq("empresa_id", profissional.id)
+      .eq("auth_user_id", currentUser.id)
+      .maybeSingle();
+
+    if (clienteBanco) {
+      clienteIdParaInsert = clienteBanco.id;
+      if (clienteBanco.nome) clienteNome = clienteBanco.nome;
+      if (clienteBanco.telefone) clienteTel = clienteBanco.telefone;
     }
 
     setSalvando(true);
@@ -532,24 +702,25 @@ function FluxoAgendamentoConteudo() {
         // Adiciona à lista de ocupados para atualizar a grade visual
         setHorariosOcupados((prev) => [...prev, horarioSelecionado]);
 
-        // Limpa o estado do horário anterior
+        // Limpa o estado do horário anterior no React e no Session Guard
         setHorarioSelecionado(null);
+        salvarNoSession(STORAGE_KEYS.HORARIO, null);
 
         // Retorna o usuário automaticamente para a Etapa 2 (Data e Hora)
-        setPassoAtual(2);
+        navegarParaPasso(2);
 
         return;
       }
 
-      // 🛡️ 2. Inserção Segura do Agendamento
+      // 🛡️ 2. Inserção Segura do Agendamento usando obrigatoriamente cliente_id autenticado
       const dataHoraIso = `${dataStr}T${horarioSelecionado}:00Z`;
 
       const { error: insertError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
-        cliente_id: clienteLogado.id,
-        nome_cliente: clienteLogado.nome,
-        whatsapp_cliente: clienteLogado.telefone,
-        cliente_telefone: clienteLogado.telefone,
+        cliente_id: clienteIdParaInsert,
+        nome_cliente: clienteNome,
+        whatsapp_cliente: clienteTel,
+        cliente_telefone: clienteTel,
         servico_id: servicoEscolhido.id,
         servico_nome: servicoEscolhido.nome,
         data: dataStr,
@@ -575,7 +746,8 @@ function FluxoAgendamentoConteudo() {
         return;
       }
 
-      // Sucesso Total!
+      // Sucesso Total! Limpa o session guard
+      limparSessionGuard();
       setSucessoFinal(true);
     } catch (err: any) {
       console.error("[LandingPage] Erro inesperado:", err);
@@ -586,6 +758,7 @@ function FluxoAgendamentoConteudo() {
   };
 
   const reiniciarFluxo = () => {
+    limparSessionGuard();
     setPassoAtual(1);
     setServicoEscolhido(null);
     setHorarioSelecionado(null);
@@ -639,7 +812,7 @@ function FluxoAgendamentoConteudo() {
                       type="button"
                       animate={{ scale: ativa ? 1.15 : 1 }}
                       onClick={() => {
-                        if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
+                        if (concluida) navegarParaPasso(etapa.numero as EtapaFluxo);
                       }}
                       className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft shrink-0 ${
                         concluida
@@ -792,9 +965,7 @@ function FluxoAgendamentoConteudo() {
                       return (
                         <div
                           key={servico.id}
-                          onClick={() => {
-                            setServicoEscolhido(servico);
-                          }}
+                          onClick={() => handleSelecionarServico(servico)}
                           className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-4 shadow-soft hover:shadow-soft-lg hover:-translate-y-1 ${
                             selecionado
                               ? "bg-primary/10 border-primary ring-2 ring-primary/25"
@@ -910,10 +1081,7 @@ function FluxoAgendamentoConteudo() {
                                 <button
                                   key={diaLoop.toISOString()}
                                   disabled={passado || !noMes}
-                                  onClick={() => {
-                                    setDataSelecionada(diaLoop);
-                                    setHorarioSelecionado(null);
-                                  }}
+                                  onClick={() => handleSelecionarData(diaLoop)}
                                   className={`h-10 rounded-xl font-body text-xs font-bold transition-all flex items-center justify-center relative cursor-pointer disabled:cursor-not-allowed ${
                                     !noMes
                                       ? "opacity-20 text-muted-foreground"
@@ -981,7 +1149,7 @@ function FluxoAgendamentoConteudo() {
                               <button
                                 key={slot}
                                 disabled={ocupado}
-                                onClick={() => setHorarioSelecionado(slot)}
+                                onClick={() => handleSelecionarHorario(slot)}
                                 className={`py-3 px-2 rounded-xl text-xs font-body font-bold transition-all border flex flex-col items-center justify-center gap-0.5 cursor-pointer disabled:cursor-not-allowed ${
                                   ocupado
                                     ? "bg-secondary/40 border-border/30 text-muted-foreground/35 line-through opacity-50"
@@ -1034,18 +1202,16 @@ function FluxoAgendamentoConteudo() {
                         <div className="pt-2 border-t border-border/30 flex items-center justify-between gap-3">
                           <button
                             type="button"
-                            onClick={async () => {
-                              await signOut();
-                              setClienteLogado(null);
-                            }}
-                            className="text-xs font-body font-bold text-muted-foreground hover:text-rose-500 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            onClick={handleTrocarConta}
+                            disabled={salvando}
+                            className="text-xs font-body font-bold text-muted-foreground hover:text-rose-500 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <LogOut size={13} />
                             Trocar de Conta
                           </button>
                           <button
                             type="button"
-                            onClick={() => setPassoAtual(4)}
+                            onClick={() => navegarParaPasso(4)}
                             className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all cursor-pointer"
                           >
                             Continuar com esta conta
@@ -1320,7 +1486,7 @@ function FluxoAgendamentoConteudo() {
               {passoAtual > 1 ? (
                 <button
                   type="button"
-                  onClick={() => setPassoAtual((prev) => (prev - 1) as EtapaFluxo)}
+                  onClick={() => navegarParaPasso((passoAtual - 1) as EtapaFluxo)}
                   className="px-5 py-2.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <ArrowLeft size={15} />
@@ -1334,7 +1500,7 @@ function FluxoAgendamentoConteudo() {
                 <button
                   type="button"
                   disabled={!servicoEscolhido}
-                  onClick={() => setPassoAtual(2)}
+                  onClick={() => navegarParaPasso(2)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este serviço
@@ -1346,7 +1512,7 @@ function FluxoAgendamentoConteudo() {
                 <button
                   type="button"
                   disabled={!horarioSelecionado}
-                  onClick={() => setPassoAtual(3)}
+                  onClick={() => navegarParaPasso(3)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este horário
@@ -1357,7 +1523,7 @@ function FluxoAgendamentoConteudo() {
               {passoAtual === 3 && clienteLogado && (
                 <button
                   type="button"
-                  onClick={() => setPassoAtual(4)}
+                  onClick={() => navegarParaPasso(4)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer"
                 >
                   Continuar para o Resumo

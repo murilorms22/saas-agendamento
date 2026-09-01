@@ -53,6 +53,7 @@ export interface ProfessionalData {
   corPrimaria: CorPrimaria;
   corPrimariaHex: string;
   logoUrl?: string;
+  slug?: string;
   disponibilidade?: any;
 }
 
@@ -210,6 +211,7 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
     corPrimaria: hexParaHsl(row.cor_primaria ?? "#0d9488"),
     corPrimariaHex: row.cor_primaria ?? "#0d9488",
     logoUrl: row.logo_url ?? "",
+    slug: row.slug ?? "",
     disponibilidade: disp,
   };
 }
@@ -282,6 +284,21 @@ export function ProfessionalProvider({
       // Se for rota administrativa e o Supabase Auth ainda estiver verificando a sessão, aguarda
       if (isAdminRoute && authLoading) {
         return;
+      }
+
+      // Se for rota pública e a clínica para o slug atual já estiver carregada, não pisca isLoading
+      if (!isAdminRoute && profissional) {
+        const pathSegments = location.pathname.split("/").filter(Boolean);
+        const slugFromPath =
+          pathSegments.length === 1 && !["admin", "login"].includes(pathSegments[0])
+            ? pathSegments[0]
+            : null;
+        const searchParams = new URLSearchParams(location.search);
+        const slugAlvo = slugFromPath || searchParams.get("slug") || slugProp || "studio-fisio";
+        if (profissional.slug === slugAlvo) {
+          setIsLoading(false);
+          return;
+        }
       }
 
       setIsLoading(true);
