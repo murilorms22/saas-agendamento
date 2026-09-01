@@ -51,6 +51,8 @@ export interface ProfessionalData {
   servicos: Servico[];
   horariosDisponiveis: string[];
   corPrimaria: CorPrimaria;
+  corPrimariaHex: string;
+  logoUrl?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +166,8 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
       "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
     ],
     corPrimaria: hexParaHsl(row.cor_primaria ?? "#0d9488"),
+    corPrimariaHex: row.cor_primaria ?? "#0d9488",
+    logoUrl: row.logo_url ?? "",
   };
 }
 

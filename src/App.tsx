@@ -9,6 +9,7 @@ import LoginPage from "./features/auth/LoginPage";
 import PainelInicial from "./features/admin/PainelInicial";
 import AdminDashboard from "./features/admin/AdminDashboard";
 import AgendaProfissional from "./features/admin/AgendaProfissional";
+import Configuracoes from "./features/admin/Configuracoes";
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
               <Route index element={<PainelInicial />} />
               <Route path="resumo" element={<AdminDashboard />} />
               <Route path="agenda" element={<AgendaProfissional />} />
+              <Route path="configuracoes" element={<Configuracoes />} />
             </Route>
           </Routes>
         </ProfessionalProvider>

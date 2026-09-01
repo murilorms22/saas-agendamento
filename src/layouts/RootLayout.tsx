@@ -12,9 +12,15 @@ export default function RootLayout() {
     <div className="h-[100dvh] flex flex-col bg-gradient-to-br from-background via-background to-primary/5 text-foreground overflow-hidden">
       {/* Cabeçalho */}
       <header className="py-4 px-6 flex justify-between items-center bg-card/80 backdrop-blur-sm shadow-sm z-50 border-b-2 border-primary/20">
-        <div className="font-display font-bold text-xl tracking-tight flex items-center gap-2 text-primary">
+        <div className="font-display font-bold text-xl tracking-tight flex items-center gap-2.5 text-primary">
           {isLoading ? (
             <Loader2 size={22} className="animate-spin opacity-60" />
+          ) : profissional?.logoUrl ? (
+            <img
+              src={profissional.logoUrl}
+              alt={nomeClinica}
+              className="h-8 max-w-[140px] object-contain rounded"
+            />
           ) : (
             <CalendarCheck size={24} />
           )}

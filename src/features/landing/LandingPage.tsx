@@ -498,6 +498,15 @@ function LandingPageConteudo() {
                   <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
                   <div className="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-white/5 blur-3xl" />
                   <div className="relative z-10">
+                    {profissional.logoUrl && (
+                      <div className="mb-4">
+                        <img
+                          src={profissional.logoUrl}
+                          alt={profissional.nomeClinica}
+                          className="h-12 max-w-[180px] object-contain rounded-xl bg-white/15 p-1.5 backdrop-blur-md shadow-xs"
+                        />
+                      </div>
+                    )}
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white font-body text-xs font-bold mb-4 w-fit backdrop-blur-sm">
                       <CheckCircle2 size={14} />
                       {profissional.profissao}
