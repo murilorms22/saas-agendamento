@@ -28,7 +28,6 @@ import {
   CalendarCheck,
   Sparkles,
   UserCheck,
-  ShieldCheck,
   LogOut,
   Mail,
   Lock,
@@ -607,39 +606,73 @@ function FluxoAgendamentoConteudo() {
         )}
       </AnimatePresence>
 
-      {/* ── Container Card Central com Glassmorphism ── */}
-      <div className="w-full max-w-4xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-[2.5rem] p-6 sm:p-10 shadow-floating flex flex-col transition-all">
-        
-        {/* ── Topo: Identificação da Clínica (Logo / Nome / Especialidade) ── */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-border/40 pb-6 mb-8">
-          <div className="flex items-center gap-3.5 text-center sm:text-left">
-            {profissional.logoUrl ? (
-              <img
-                src={profissional.logoUrl}
-                alt={profissional.nomeClinica}
-                className="h-11 max-w-[140px] object-contain rounded-xl bg-background/80 p-1 border border-border/50 shadow-2xs"
-              />
-            ) : (
-              <div className="w-11 h-11 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-display font-black text-lg shadow-inner">
-                {profissional.nomeClinica.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div>
-              <h2 className="font-display font-bold text-foreground text-lg sm:text-xl leading-tight">
-                {profissional.nomeClinica}
-              </h2>
-              <p className="font-body text-xs font-semibold text-primary">
-                {profissional.profissao}
-              </p>
-            </div>
-          </div>
+      {/* ── Stepper com Linha do Tempo (FORA do card, no topo com bom espaçamento abaixo da navbar) ── */}
+      {!sucessoFinal && (
+        <div className="w-full max-w-2xl mx-auto pt-6 sm:pt-8 pb-8 px-4">
+          <div className="relative flex items-center justify-between">
+            {/* Linha de Fundo */}
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-border/60 rounded-full -z-0" />
+            {/* Linha de Progresso Colorida Preenchida */}
+            <motion.div
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full -z-0 transition-all duration-400"
+              animate={{
+                width:
+                  passoAtual === 1
+                    ? "0%"
+                    : passoAtual === 2
+                    ? "33.3%"
+                    : passoAtual === 3
+                    ? "66.6%"
+                    : "100%",
+              }}
+            />
 
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary font-body text-xs font-bold border border-primary/20">
-            <ShieldCheck size={14} />
-            <span>Agendamento Online Oficial</span>
+            {ETAPAS.map((etapa) => {
+              const concluida = etapa.numero < passoAtual;
+              const ativa = etapa.numero === passoAtual;
+              const Icone = etapa.icone;
+
+              return (
+                <div
+                  key={etapa.numero}
+                  className="flex flex-col items-center relative z-10 cursor-pointer group"
+                  onClick={() => {
+                    // Permite navegar para trás clicando na bolinha
+                    if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
+                  }}
+                >
+                  <motion.div
+                    animate={{ scale: ativa ? 1.15 : 1 }}
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft ${
+                      concluida
+                        ? "bg-primary text-primary-foreground"
+                        : ativa
+                        ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
+                        : "bg-card text-muted-foreground border-2 border-border/70"
+                    }`}
+                  >
+                    {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
+                  </motion.div>
+                  <span
+                    className={`mt-2.5 font-body text-[11px] sm:text-xs font-bold transition-colors text-center hidden sm:block ${
+                      ativa
+                        ? "text-primary font-extrabold"
+                        : concluida
+                        ? "text-foreground font-semibold"
+                        : "text-muted-foreground font-medium"
+                    }`}
+                  >
+                    {etapa.numero}. {etapa.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
 
+      {/* ── Container Card Central com Glassmorphism ── */}
+      <div className="w-full max-w-4xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-[2.5rem] p-6 sm:p-10 shadow-floating flex flex-col transition-all">
         {/* Se já foi finalizado com sucesso, exibe tela de celebração */}
         {sucessoFinal ? (
           <motion.div
@@ -707,68 +740,6 @@ function FluxoAgendamentoConteudo() {
           </motion.div>
         ) : (
           <>
-            {/* ── Stepper com Linha do Tempo ── */}
-            <div className="w-full max-w-2xl mx-auto mb-10 px-2">
-              <div className="relative flex items-center justify-between">
-                {/* Linha de Fundo */}
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-border/60 rounded-full -z-0" />
-                {/* Linha de Progresso Colorida Preenchida */}
-                <motion.div
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full -z-0 transition-all duration-400"
-                  animate={{
-                    width:
-                      passoAtual === 1
-                        ? "0%"
-                        : passoAtual === 2
-                        ? "33.3%"
-                        : passoAtual === 3
-                        ? "66.6%"
-                        : "100%",
-                  }}
-                />
-
-                {ETAPAS.map((etapa) => {
-                  const concluida = etapa.numero < passoAtual;
-                  const ativa = etapa.numero === passoAtual;
-                  const Icone = etapa.icone;
-
-                  return (
-                    <div
-                      key={etapa.numero}
-                      className="flex flex-col items-center relative z-10 cursor-pointer"
-                      onClick={() => {
-                        // Permite navegar para trás clicando na bolinha
-                        if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
-                      }}
-                    >
-                      <motion.div
-                        animate={{ scale: ativa ? 1.15 : 1 }}
-                        className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft ${
-                          concluida
-                            ? "bg-primary text-primary-foreground"
-                            : ativa
-                            ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
-                            : "bg-card text-muted-foreground border-2 border-border/70"
-                        }`}
-                      >
-                        {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
-                      </motion.div>
-                      <span
-                        className={`mt-2 font-body text-[11px] sm:text-xs font-bold transition-colors text-center hidden sm:block ${
-                          ativa
-                            ? "text-primary font-extrabold"
-                            : concluida
-                            ? "text-foreground font-semibold"
-                            : "text-muted-foreground font-medium"
-                        }`}
-                      >
-                        {etapa.numero}. {etapa.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* ── Tipografia de Impacto da Etapa Atual ── */}
             <div className="text-center mb-8 max-w-xl mx-auto space-y-2">
@@ -807,7 +778,6 @@ function FluxoAgendamentoConteudo() {
                           key={servico.id}
                           onClick={() => {
                             setServicoEscolhido(servico);
-                            setPassoAtual(2); // Avança com 1 clique para máxima fluidez
                           }}
                           className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-4 shadow-soft hover:shadow-soft-lg hover:-translate-y-1 ${
                             selecionado
@@ -841,7 +811,15 @@ function FluxoAgendamentoConteudo() {
                               {servico.preco}
                             </span>
                             <span className="font-body text-xs font-bold text-primary flex items-center gap-1">
-                              Selecionar <ArrowRight size={13} />
+                              {selecionado ? (
+                                <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                                  <Check size={13} className="stroke-[3]" /> Selecionado
+                                </span>
+                              ) : (
+                                <>
+                                  Selecionar <ArrowRight size={13} />
+                                </>
+                              )}
                             </span>
                           </div>
                         </div>
@@ -1343,7 +1321,7 @@ function FluxoAgendamentoConteudo() {
                   onClick={() => setPassoAtual(2)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Avançar para Data e Hora
+                  Continuar com este serviço
                   <ArrowRight size={15} />
                 </button>
               )}
@@ -1355,7 +1333,7 @@ function FluxoAgendamentoConteudo() {
                   onClick={() => setPassoAtual(3)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Avançar para Identificação
+                  Continuar com este horário
                   <ArrowRight size={15} />
                 </button>
               )}
@@ -1366,7 +1344,7 @@ function FluxoAgendamentoConteudo() {
                   onClick={() => setPassoAtual(4)}
                   className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  Avançar para Resumo
+                  Continuar para o Resumo
                   <ArrowRight size={15} />
                 </button>
               )}
