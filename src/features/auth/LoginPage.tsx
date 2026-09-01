@@ -11,23 +11,32 @@ import {
   Eye,
   EyeOff,
   LogIn,
+  User,
+  UserPlus,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
   const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Modo da tela: "login" ou "cadastro"
+  const [modo, setModo] = useState<"login" | "cadastro">("login");
+
   // Estados dos inputs
+  const [nomeCadastro, setNomeCadastro] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Estados de requisição e erros
+  // Estados de requisição e feedbacks
   const [enviandoEmail, setEnviandoEmail] = useState(false);
   const [iniciandoGoogle, setIniciandoGoogle] = useState(false);
   const [erroLogin, setErroLogin] = useState<string | null>(null);
+  const [sucessoCadastro, setSucessoCadastro] = useState<string | null>(null);
 
   const carregandoGeral = authLoading || enviandoEmail || iniciandoGoogle;
 
@@ -50,6 +59,7 @@ export default function LoginPage() {
   const handleLoginEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErroLogin(null);
+    setSucessoCadastro(null);
 
     if (!email.trim() || !password) {
       setErroLogin("Por favor, preencha o e-mail e a senha.");
@@ -82,16 +92,75 @@ export default function LoginPage() {
     }
   };
 
-  // Handler de login com Google OAuth
+  // Handler de cadastro com e-mail e senha
+  const handleCadastroEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroLogin(null);
+    setSucessoCadastro(null);
+
+    if (!nomeCadastro.trim()) {
+      setErroLogin("Por favor, preencha seu nome completo.");
+      return;
+    }
+
+    if (!email.trim() || !password) {
+      setErroLogin("Por favor, preencha o e-mail e a senha.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setErroLogin("A senha deve conter no mínimo 6 caracteres.");
+      return;
+    }
+
+    setEnviandoEmail(true);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            full_name: nomeCadastro.trim(),
+          },
+        },
+      });
+
+      if (error) {
+        if (error.message.includes("User already registered")) {
+          setErroLogin("Este e-mail já está cadastrado. Clique em 'Fazer login' para entrar.");
+        } else {
+          setErroLogin(error.message || "Falha ao criar conta. Tente novamente.");
+        }
+        setEnviandoEmail(false);
+        return;
+      }
+
+      if (data.session) {
+        // Usuário criado e sessão ativa: o useEffect redirecionará
+        setEnviandoEmail(false);
+      } else {
+        setSucessoCadastro("Conta criada com sucesso! Verifique sua caixa de entrada para confirmar seu e-mail.");
+        setEnviandoEmail(false);
+      }
+    } catch (err: any) {
+      console.error("Erro ao cadastrar:", err);
+      setErroLogin("Ocorreu uma falha inesperada ao processar o cadastro.");
+      setEnviandoEmail(false);
+    }
+  };
+
+  // Handler de login / cadastro com Google OAuth
   const handleLoginGoogle = async () => {
     setErroLogin(null);
+    setSucessoCadastro(null);
     setIniciandoGoogle(true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
         setErroLogin(
           error.message ||
-          "Não foi possível iniciar o login com o Google. Verifique a configuração do provedor no Supabase."
+          "Não foi possível conectar com o Google. Verifique o serviço."
         );
         setIniciandoGoogle(false);
       }
@@ -138,11 +207,13 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-foreground tracking-tight">
-            Bem-vindo de volta
+            {modo === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
           </h1>
 
           <p className="text-xs sm:text-sm font-body text-muted-foreground mt-2 leading-relaxed">
-            Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos.
+            {modo === "login"
+              ? "Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos."
+              : "Cadastre-se para começar a gerenciar sua agenda, horários e atendimentos."}
           </p>
         </div>
 
@@ -160,8 +231,47 @@ export default function LoginPage() {
           </motion.div>
         )}
 
-        {/* Formulário de Email e Senha */}
-        <form onSubmit={handleLoginEmail} className="space-y-4">
+        {/* Mensagem de Sucesso no Cadastro, se houver */}
+        {sucessoCadastro && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-body font-medium flex items-start gap-2.5"
+          >
+            <CheckCircle2 size={17} className="shrink-0 mt-0.5 text-emerald-600" />
+            <div className="flex-1 leading-relaxed">
+              <span>{sucessoCadastro}</span>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Formulário de Email e Senha (ou Cadastro) */}
+        <form onSubmit={modo === "login" ? handleLoginEmail : handleCadastroEmail} className="space-y-4">
+          {/* Campo Nome Completo (Apenas no Modo Cadastro) */}
+          {modo === "cadastro" && (
+            <div>
+              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+                Nome Completo
+              </label>
+              <div className="relative">
+                <User
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <input
+                  type="text"
+                  value={nomeCadastro}
+                  onChange={(e) => setNomeCadastro(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                  maxLength={80}
+                  disabled={carregandoGeral}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
               E-mail
@@ -185,7 +295,7 @@ export default function LoginPage() {
 
           <div>
             <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Senha
+              Senha {modo === "cadastro" && <span className="font-normal text-[11px] lowercase">(mínimo 6 caracteres)</span>}
             </label>
             <div className="relative">
               <Lock
@@ -196,8 +306,9 @@ export default function LoginPage() {
                 type={mostrarSenha ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={modo === "cadastro" ? "Crie sua senha segura" : "••••••••"}
                 required
+                minLength={modo === "cadastro" ? 6 : undefined}
                 disabled={carregandoGeral}
                 className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
               />
@@ -213,7 +324,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Botão Submit Entrar */}
+          {/* Botão Submit */}
           <motion.button
             whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
             whileTap={carregandoGeral ? {} : { scale: 0.98 }}
@@ -242,12 +353,12 @@ export default function LoginPage() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                <span>Entrando...</span>
+                <span>{modo === "login" ? "Entrando..." : "Cadastrando..."}</span>
               </>
             ) : (
               <>
-                <LogIn size={16} />
-                <span>Entrar</span>
+                {modo === "login" ? <LogIn size={16} /> : <UserPlus size={16} />}
+                <span>{modo === "login" ? "Entrar" : "Criar Conta"}</span>
               </>
             )}
           </motion.button>
@@ -263,7 +374,7 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Botão de Destaque: Entrar com Google */}
+        {/* Botão de Destaque: Google OAuth */}
         <div>
           <motion.button
             whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
@@ -317,10 +428,45 @@ export default function LoginPage() {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>Entrar com Google</span>
+                <span>{modo === "login" ? "Entrar com Google" : "Cadastrar com Google"}</span>
               </>
             )}
           </motion.button>
+        </div>
+
+        {/* ── Opção de Alternância: Não tem uma conta? / Já tem uma conta? ── */}
+        <div className="text-center mt-6 pt-5 border-t border-border/30">
+          {modo === "login" ? (
+            <p className="text-xs sm:text-sm font-body text-muted-foreground">
+              Não tem uma conta?
+              <button
+                type="button"
+                onClick={() => {
+                  setModo("cadastro");
+                  setErroLogin(null);
+                  setSucessoCadastro(null);
+                }}
+                className="font-bold text-primary hover:underline transition-all cursor-pointer ml-1.5"
+              >
+                Cadastre-se
+              </button>
+            </p>
+          ) : (
+            <p className="text-xs sm:text-sm font-body text-muted-foreground">
+              Já tem uma conta?
+              <button
+                type="button"
+                onClick={() => {
+                  setModo("login");
+                  setErroLogin(null);
+                  setSucessoCadastro(null);
+                }}
+                className="font-bold text-primary hover:underline transition-all cursor-pointer ml-1.5"
+              >
+                Fazer login
+              </button>
+            </p>
+          )}
         </div>
 
         {/* Informações Adicionais / Selo de Segurança */}
