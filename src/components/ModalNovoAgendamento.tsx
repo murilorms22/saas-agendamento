@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { X, Search, Phone, UserCheck, Pencil } from "lucide-react";
+import { X, Search, Phone, UserCheck, Pencil, AlertCircle, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
 
@@ -63,6 +63,54 @@ export function ModalNovoAgendamento({
   const [sugestoes, setSugestoes] = useState<{ id?: string; nome: string; telefone?: string }[]>([]);
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const containerSugestoesRef = useRef<HTMLDivElement>(null);
+
+  // Trava de Segurança: agendamentos existentes no dia
+  const [agendamentosDoDia, setAgendamentosDoDia] = useState<
+    { id: string; horario: string; nomeCliente: string }[]
+  >([]);
+  const [erroTrava, setErroTrava] = useState<string | null>(null);
+
+  // Carrega agendamentos da data selecionada para travar conflitos
+  useEffect(() => {
+    async function carregarOcupados() {
+      if (!empresaId || !dataSelecionada) return;
+      try {
+        const { data: ags, error } = await supabase
+          .from("agendamentos")
+          .select("id, horario, data, data_hora_agendamento, nome_cliente, status")
+          .eq("empresa_id", empresaId)
+          .neq("status", "Cancelado");
+
+        if (!error && ags) {
+          const doDia = ags
+            .filter((a: any) => {
+              const d = a.data ?? (a.data_hora_agendamento ? a.data_hora_agendamento.split("T")[0] : "");
+              return d === dataSelecionada;
+            })
+            .map((a: any) => {
+              let h = a.horario;
+              if (!h && a.data_hora_agendamento) {
+                const parte = a.data_hora_agendamento.split("T")[1];
+                if (parte) h = parte.slice(0, 5);
+              }
+              return {
+                id: String(a.id),
+                horario: h ?? "08:00",
+                nomeCliente: a.nome_cliente ?? "Cliente",
+              };
+            });
+
+          setAgendamentosDoDia(doDia);
+        }
+      } catch (err) {
+        console.error("Erro ao verificar agendamentos do dia:", err);
+      }
+    }
+
+    if (aberto) {
+      carregarOcupados();
+    }
+  }, [empresaId, dataSelecionada, aberto]);
 
   const abertoAnteriorRef = useRef(false);
 
@@ -166,6 +214,40 @@ export function ModalNovoAgendamento({
       }
     }
 
+    // Trava de Segurança: Não permite que o profissional agende por cima de um horário já ocupado
+    const conflitoLocal = agendamentosDoDia.find(
+      (a) => a.horario === horario && (!agendamentoInicial || String(a.id) !== String(agendamentoInicial.id))
+    );
+
+    if (conflitoLocal) {
+      setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${conflitoLocal.nomeCliente} nesta data!`);
+      return;
+    }
+
+    // Checagem direta no Supabase para garantir integridade
+    if (empresaId) {
+      try {
+        const { data: conflitosNoBanco } = await supabase
+          .from("agendamentos")
+          .select("id, nome_cliente")
+          .eq("empresa_id", empresaId)
+          .eq("data", dataSelecionada)
+          .eq("horario", horario)
+          .neq("status", "Cancelado");
+
+        const conflitoReal = (conflitosNoBanco ?? []).find(
+          (c: any) => !agendamentoInicial || String(c.id) !== String(agendamentoInicial.id)
+        );
+
+        if (conflitoReal) {
+          setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${conflitoReal.nome_cliente} nesta data!`);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn("Aviso ao checar conflito no banco:", checkErr);
+      }
+    }
+
     const item: AgendamentoItem = {
       id: agendamentoInicial ? agendamentoInicial.id : `ag_${Date.now()}`,
       data: dataSelecionada,
@@ -179,6 +261,10 @@ export function ModalNovoAgendamento({
     onSalvar(item);
     onFechar();
   };
+
+  const conflitoAtual = agendamentosDoDia.find(
+    (a) => a.horario === horario && (!agendamentoInicial || String(a.id) !== String(agendamentoInicial.id))
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -223,6 +309,22 @@ export function ModalNovoAgendamento({
             <X size={16} />
           </motion.button>
         </div>
+
+        {erroTrava && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-700 font-body text-xs font-semibold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} className="text-rose-600 shrink-0" />
+              <span>{erroTrava}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErroTrava(null)}
+              className="p-1 hover:bg-rose-500/10 rounded-lg text-rose-600 cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Data do Agendamento */}
@@ -351,20 +453,42 @@ export function ModalNovoAgendamento({
             </div>
 
             <div>
-              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Horário
+              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>Horário</span>
+                {conflitoAtual && (
+                  <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+                    <Lock size={10} /> Ocupado
+                  </span>
+                )}
               </label>
               <select
                 value={horario}
-                onChange={(e) => setHorario(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                onChange={(e) => {
+                  setHorario(e.target.value);
+                  setErroTrava(null);
+                }}
+                className={`w-full px-3 py-2.5 rounded-xl border bg-background text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 transition-colors ${
+                  conflitoAtual
+                    ? "border-rose-500 focus:ring-rose-500/40 text-rose-700 bg-rose-500/5"
+                    : "border-border focus:ring-primary/40"
+                }`}
               >
-                {horariosDisponiveis.map((h) => (
-                  <option key={h} value={h}>
-                    {h}
-                  </option>
-                ))}
+                {horariosDisponiveis.map((h) => {
+                  const ocupado = agendamentosDoDia.find(
+                    (a) => a.horario === h && (!agendamentoInicial || String(a.id) !== String(agendamentoInicial.id))
+                  );
+                  return (
+                    <option key={h} value={h} disabled={Boolean(ocupado)}>
+                      {h} {ocupado ? `— ⚠️ Ocupado (${ocupado.nomeCliente})` : ""}
+                    </option>
+                  );
+                })}
               </select>
+              {conflitoAtual && (
+                <p className="text-[10px] font-body text-rose-600 font-medium mt-1">
+                  Já reservado para <strong>{conflitoAtual.nomeCliente}</strong>.
+                </p>
+              )}
             </div>
           </div>
 

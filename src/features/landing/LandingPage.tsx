@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   format,
   addDays,
@@ -14,7 +14,7 @@ import {
   startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star } from "lucide-react";
+import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { PageLoader } from "../../components/PageLoader";
@@ -56,6 +56,68 @@ function LandingPageConteudo() {
   const [nome, setNome] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [enviado, setEnviado] = useState(false);
+
+  // Trava de Segurança: Horários já reservados
+  const [horariosOcupados, setHorariosOcupados] = useState<string[]>([]);
+  const [erroConflito, setErroConflito] = useState<string | null>(null);
+
+  // Busca em tempo real os horários já agendados para a data selecionada
+  useEffect(() => {
+    async function buscarOcupados() {
+      if (!profissional?.id || !dataSelecionada) return;
+      const dataStr = format(dataSelecionada, "yyyy-MM-dd");
+
+      try {
+        const { data: ags } = await supabase
+          .from("agendamentos")
+          .select("horario, data, data_hora_agendamento, status")
+          .eq("empresa_id", profissional.id)
+          .neq("status", "Cancelado");
+
+        if (ags) {
+          const ocupados = ags
+            .filter((a: any) => {
+              const d = a.data ?? (a.data_hora_agendamento ? a.data_hora_agendamento.split("T")[0] : "");
+              return d === dataStr;
+            })
+            .map((a: any) => {
+              if (a.horario) return a.horario;
+              if (a.data_hora_agendamento) {
+                const parte = a.data_hora_agendamento.split("T")[1];
+                if (parte) return parte.slice(0, 5);
+              }
+              return null;
+            })
+            .filter(Boolean) as string[];
+
+          setHorariosOcupados(ocupados);
+
+          // Se o horário selecionado acabou de ser ocupado, desmarca
+          setHorarioSelecionado((prev) => (prev && ocupados.includes(prev) ? null : prev));
+        }
+      } catch (err) {
+        console.error("Erro ao buscar horários ocupados:", err);
+      }
+    }
+
+    buscarOcupados();
+
+    // Escuta em tempo real se alguém agendar para bloquear na hora
+    const channel = supabase
+      .channel("landing-conflitos-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agendamentos" },
+        () => {
+          buscarOcupados();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [dataSelecionada, profissional?.id]);
 
   // Máscara de telefone: (DDD) 00000-0000
   const mascararTelefone = (valor: string): string => {
@@ -193,6 +255,24 @@ function LandingPageConteudo() {
         : null;
 
       const dataHoraIso = `${dataStr}T${horarioSelecionado ?? "08:00"}:00Z`;
+
+      // Trava de Segurança: Garante que ninguém agendou nesse meio tempo
+      const { data: conflitos } = await supabase
+        .from("agendamentos")
+        .select("id, status")
+        .eq("empresa_id", profissional.id)
+        .eq("data", dataStr)
+        .eq("horario", horarioSelecionado ?? "08:00")
+        .neq("status", "Cancelado")
+        .limit(1);
+
+      if (conflitos && conflitos.length > 0) {
+        setErroConflito("Este horário já foi preenchido por outro agendamento. Por favor, escolha outro horário disponível.");
+        setSalvando(false);
+        setEtapa("selecao");
+        setHorarioSelecionado(null);
+        return;
+      }
 
       // 2. Registra o agendamento no Supabase
       const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
@@ -500,27 +580,56 @@ function LandingPageConteudo() {
                         animate={{ color: servicoSelecionado ? "white" : "hsl(var(--foreground))" }}
                         transition={{ duration: 0.4, delay: 0.1 }}
                       >
-                        Horários disponíveis para{" "}
+                        Horários para{" "}
                         {format(dataSelecionada, "dd 'de' MMMM", { locale: ptBR })}
                       </motion.span>
-                      <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
+
+                      {erroConflito && (
+                        <div className="mb-4 p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-white font-body text-xs font-semibold flex items-center justify-between gap-2 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle size={16} className="text-white shrink-0" />
+                            <span>{erroConflito}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setErroConflito(null)}
+                            className="p-1 hover:bg-white/20 rounded-lg text-white"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-3 xl:grid-cols-4 gap-2.5 mb-6">
                         {profissional.horariosDisponiveis.map((horario) => {
+                          const ocupado = horariosOcupados.includes(horario);
                           const ativo = horarioSelecionado === horario;
                           return (
                             <button
                               key={horario}
-                              onClick={() => setHorarioSelecionado(horario)}
-                              className={`py-3 rounded-xl border font-body text-sm font-bold transition-all ${
-                                ativo
+                              disabled={ocupado}
+                              onClick={() => !ocupado && setHorarioSelecionado(horario)}
+                              title={ocupado ? `Horário ${horario} já reservado` : `Selecionar ${horario}`}
+                              className={`py-2.5 px-2 rounded-xl border font-body text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${
+                                ocupado
                                   ? servicoSelecionado
-                                    ? "bg-white text-primary border-white shadow-md"
-                                    : "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/30"
+                                    ? "bg-black/20 border-white/10 text-white/40 cursor-not-allowed line-through"
+                                    : "bg-secondary/40 border-border/40 text-muted-foreground/35 cursor-not-allowed line-through"
+                                  : ativo
+                                  ? servicoSelecionado
+                                    ? "bg-white text-primary border-white shadow-md cursor-pointer"
+                                    : "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/30 cursor-pointer"
                                   : servicoSelecionado
-                                  ? "bg-white/10 border-white/20 text-white hover:bg-white/20"
-                                  : "bg-background border-border text-foreground hover:border-primary/40"
+                                  ? "bg-white/10 border-white/20 text-white hover:bg-white/20 cursor-pointer"
+                                  : "bg-background border-border text-foreground hover:border-primary/40 cursor-pointer"
                               }`}
                             >
-                              {horario}
+                              <span>{horario}</span>
+                              {ocupado && (
+                                <span className="text-[9px] font-semibold no-underline tracking-normal text-rose-300">
+                                  Reservado
+                                </span>
+                              )}
                             </button>
                           );
                         })}

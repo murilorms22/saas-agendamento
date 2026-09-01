@@ -30,6 +30,21 @@ export default function AdminLayout() {
     if (!profissional?.id) return;
 
     try {
+      // Trava de segurança: checa conflito no banco
+      const { data: conflitos } = await supabase
+        .from("agendamentos")
+        .select("id, nome_cliente")
+        .eq("empresa_id", profissional.id)
+        .eq("data", novo.data)
+        .eq("horario", novo.horario)
+        .neq("status", "Cancelado")
+        .limit(1);
+
+      if (conflitos && conflitos.length > 0) {
+        alert(`Trava de segurança: O horário das ${novo.horario} em ${novo.data} já está reservado para ${conflitos[0].nome_cliente}!`);
+        return;
+      }
+
       const dataHoraIso = `${novo.data}T${novo.horario}:00Z`;
       const { data, error } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,

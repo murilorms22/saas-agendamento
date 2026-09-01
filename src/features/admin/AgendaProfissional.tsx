@@ -1485,6 +1485,16 @@ function AgendaConteudo() {
   }, [profissional?.servicos]);
 
   const handleAdicionarAgendamento = async (novo: AgendamentoSemana) => {
+    // Trava de segurança: verifica se já existe agendamento ativo nesse horário
+    const conflitoExistente = agendamentos.find(
+      (a) => a.data === novo.data && a.horario === novo.horario && a.id !== novo.id && a.status !== "Cancelado"
+    );
+
+    if (conflitoExistente) {
+      alert(`Trava de segurança: O horário das ${novo.horario} em ${novo.data} já está reservado para ${conflitoExistente.nomeCliente}!`);
+      return;
+    }
+
     // Atualização otimista
     setAgendamentos((prev) => [...prev, novo]);
 
@@ -1519,6 +1529,16 @@ function AgendaConteudo() {
   };
 
   const handleAtualizarAgendamento = async (editado: AgendamentoSemana) => {
+    // Trava de segurança: verifica se a alteração de horário colide com outro agendamento
+    const conflitoExistente = agendamentos.find(
+      (a) => a.data === editado.data && a.horario === editado.horario && a.id !== editado.id && a.status !== "Cancelado"
+    );
+
+    if (conflitoExistente) {
+      alert(`Trava de segurança: O horário das ${editado.horario} em ${editado.data} já está reservado para ${conflitoExistente.nomeCliente}!`);
+      return;
+    }
+
     // Atualização otimista
     setAgendamentos((prev) =>
       prev.map((a) => (a.id === editado.id ? editado : a))
