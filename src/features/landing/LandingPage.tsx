@@ -132,6 +132,37 @@ function LandingPageConteudo() {
     return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
   };
 
+  /**
+   * Sanitiza o nome do cliente contra XSS, HTML Injection e CSV Injection.
+   * Suporta caracteres Unicode \p{L} (permitindo acentos pt-BR como João, Conceição, d'Ávila),
+   * espaços, apóstrofos e hífens, mas arranca violentamente < > = ; |.
+   * Limita a 80 caracteres via .slice().
+   */
+  const sanitizarTexto = (valor: string): string => {
+    if (!valor) return "";
+
+    // 1. Remove qualquer tag HTML/script
+    let limpo = valor.replace(/<[^>]*>?/gm, "");
+
+    // 2. Remove gatilhos de injeção de fórmulas CSV/Excel no início (=, +, -, @, |, ;, `)
+    limpo = limpo.replace(/^[=+\-@|;`]+/, "");
+
+    // 3. Permite estritamente: letras Unicode (\p{L}), espaços (\s), apóstrofos (' ’) e hífens (-)
+    limpo = limpo.replace(/[^\p{L}\s'’-]/gu, "");
+
+    // 4. Normaliza espaços múltiplos e trunca para 80 caracteres
+    return limpo.replace(/\s+/g, " ").trim().slice(0, 80);
+  };
+
+  /**
+   * Sanitiza o telefone removendo qualquer caractere não numérico,
+   * garantindo que apenas números cheguem ao banco de dados Supabase (máximo 11 dígitos).
+   */
+  const sanitizarTelefone = (valor: string): string => {
+    if (!valor) return "";
+    return valor.replace(/\D/g, "").slice(0, 11);
+  };
+
   // Ref para scroll automático ao card 2
   const cardDataHoraRef = useRef<HTMLDivElement>(null);
 
@@ -233,6 +264,22 @@ function LandingPageConteudo() {
     setSalvando(true);
 
     try {
+      // Sanitização estrita anti-XSS e anti-CSV Injection
+      const nomeSanitizado = sanitizarTexto(nome);
+      const telefoneSanitizado = sanitizarTelefone(whatsapp);
+
+      if (!nomeSanitizado || nomeSanitizado.length < 2) {
+        alert("Por favor, digite seu nome completo (mínimo de 2 caracteres).");
+        setSalvando(false);
+        return;
+      }
+
+      if (!telefoneSanitizado || telefoneSanitizado.length < 10) {
+        alert("Por favor, digite um número de WhatsApp válido com DDD.");
+        setSalvando(false);
+        return;
+      }
+
       const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
       // 1. Cadastra ou atualiza o cliente na base de clientes do profissional
@@ -240,8 +287,8 @@ function LandingPageConteudo() {
         await supabase.from("clientes").upsert(
           {
             empresa_id: profissional.id,
-            nome: nome.trim(),
-            telefone: whatsapp.trim(),
+            nome: nomeSanitizado,
+            telefone: telefoneSanitizado,
           },
           { onConflict: "empresa_id,telefone" }
         );
@@ -274,12 +321,12 @@ function LandingPageConteudo() {
         return;
       }
 
-      // 2. Registra o agendamento no Supabase
+      // 2. Registra o agendamento no Supabase com os dados rigorosamente sanitizados
       const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
-        nome_cliente: nome.trim(),
-        whatsapp_cliente: whatsapp.trim(),
-        cliente_telefone: whatsapp.trim(),
+        nome_cliente: nomeSanitizado,
+        whatsapp_cliente: telefoneSanitizado,
+        cliente_telefone: telefoneSanitizado,
         servico_id: servicoIdUuid,
         servico_nome: servicoEscolhido?.nome ?? "Consulta",
         data: dataStr,
@@ -290,17 +337,21 @@ function LandingPageConteudo() {
 
       if (agError) {
         console.error("Erro ao salvar agendamento no Supabase:", agError);
+        alert("Erro ao confirmar agendamento. Por favor, tente novamente.");
+        setSalvando(false);
+        return;
       }
 
       // Notifica abas / componentes locais em tempo real
       if (agCriado) {
         window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: agCriado }));
       }
-    } catch (err) {
-      console.error("Erro ao salvar agendamento no Supabase:", err);
-    } finally {
+
       setSalvando(false);
       setEnviado(true);
+    } catch (err) {
+      console.error("Erro ao salvar agendamento no Supabase:", err);
+      setSalvando(false);
     }
   };
 

@@ -81,15 +81,27 @@ function DashboardConteudo() {
   };
 
   const handleExcluir = async (id: string) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao excluir agendamento.");
+      return;
+    }
     setAgendamentos((prev) => prev.filter((a) => a.id !== id));
     try {
-      await supabase.from("agendamentos").delete().eq("id", id);
+      await supabase
+        .from("agendamentos")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao excluir agendamento:", err);
     }
   };
 
   const handleSalvarEdicao = async (editado: AgendamentoItem) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao editar agendamento.");
+      return;
+    }
     setAgendamentos((prev) =>
       prev.map((a) => (a.id === editado.id ? { ...a, ...editado } : a))
     );
@@ -104,7 +116,8 @@ function DashboardConteudo() {
           horario: editado.horario,
           status: editado.status,
         })
-        .eq("id", editado.id);
+        .eq("id", editado.id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao salvar edição de agendamento:", err);
     }
@@ -180,14 +193,23 @@ function DashboardConteudo() {
   }, []);
 
   const handleStatus = async (id: string, novoStatus: Status) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao atualizar status.");
+      return;
+    }
+
     // Atualização otimista
     setAgendamentos((prev) =>
       prev.map((ag) => (ag.id === id ? { ...ag, status: novoStatus } : ag))
     );
 
-    // Persiste no Supabase
+    // Persiste no Supabase com trava estrita de escopo
     try {
-      await supabase.from("agendamentos").update({ status: novoStatus }).eq("id", id);
+      await supabase
+        .from("agendamentos")
+        .update({ status: novoStatus })
+        .eq("id", id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao atualizar status do agendamento:", err);
     }

@@ -33,6 +33,13 @@ export default function LoginPage() {
 
   const carregandoGeral = authLoading || enviandoEmail || iniciandoGoogle;
 
+  // Captura mensagem de erro vinda de redirecionamentos seguros
+  useEffect(() => {
+    if ((location.state as any)?.erro) {
+      setErroLogin((location.state as any).erro);
+    }
+  }, [location.state]);
+
   // Redireciona se o usuário já estiver autenticado
   useEffect(() => {
     if (!authLoading && user) {
@@ -86,7 +93,7 @@ export default function LoginPage() {
       if (error) {
         setErroLogin(
           error.message ||
-            "Não foi possível iniciar o login com o Google. Verifique a configuração do provedor no Supabase."
+          "Não foi possível iniciar o login com o Google. Verifique a configuração do provedor no Supabase."
         );
         setIniciandoGoogle(false);
       }

@@ -19,6 +19,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,9 +203,13 @@ interface ProfessionalProviderProps {
 }
 
 export function ProfessionalProvider({
-  slug = "studio-fisio",
+  slug: slugProp,
   children,
 }: ProfessionalProviderProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading, signOut } = useAuth();
+
   const [profissional, setProfissional] = useState<ProfessionalData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,19 +223,96 @@ export function ProfessionalProvider({
     let cancelado = false; // evita setState após desmontagem
 
     async function carregarDados() {
+      const isAdminRoute = location.pathname.startsWith("/admin");
+
+      // Se for rota administrativa e o Supabase Auth ainda estiver verificando a sessão, aguarda
+      if (isAdminRoute && authLoading) {
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
       try {
-        // 1️⃣ Busca a empresa pelo slug
-        const { data: empresaData, error: empresaError } = await supabase
-          .from("empresas")
-          .select("*")
-          .eq("slug", slug)
-          .single();
+        let empresaData: any = null;
 
-        if (empresaError) throw new Error(empresaError.message);
-        if (!empresaData) throw new Error(`Empresa com slug "${slug}" não encontrada.`);
+        if (isAdminRoute) {
+          // 🛡️ ROTA ADMIN: Trava estrita contra Tenant Impersonation
+          // Exige o user.id autenticado para localizar a clínica da qual é proprietário
+          if (!user?.id) {
+            // O AuthGuard redirecionará para o /login
+            setIsLoading(false);
+            return;
+          }
+
+          // Busca empresa vinculada a este usuário no banco
+          const { data, error: empresaError } = await supabase
+            .from("empresas")
+            .select("*")
+            .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`)
+            .maybeSingle();
+
+          if (empresaError) {
+            console.error("[useProfessional] Erro ao buscar clínica do profissional:", empresaError.message);
+          }
+
+          empresaData = data;
+
+          // Se a clínica inicial de desenvolvimento ainda não tiver user_id vinculado, vincula automaticamente
+          if (!empresaData) {
+            const { data: clinicaDesvinculada } = await supabase
+              .from("empresas")
+              .select("*")
+              .is("user_id", null)
+              .limit(1)
+              .maybeSingle();
+
+            if (clinicaDesvinculada) {
+              await supabase
+                .from("empresas")
+                .update({ user_id: user.id, auth_user_id: user.id })
+                .eq("id", clinicaDesvinculada.id);
+
+              empresaData = {
+                ...clinicaDesvinculada,
+                user_id: user.id,
+                auth_user_id: user.id,
+              };
+            }
+          }
+
+          // Se nenhuma clínica foi encontrada para este usuário autenticado:
+          // Força signOut() e redireciona imediatamente para o login com erro claro
+          if (!empresaData) {
+            console.warn("[useProfessional] Nenhuma clínica vinculada a este usuário. Forçando logout.");
+            await signOut();
+            if (!cancelado) {
+              setIsLoading(false);
+              navigate("/login", {
+                state: {
+                  erro: "Clínica não encontrada. Nenhuma clínica está associada a esta conta.",
+                },
+                replace: true,
+              });
+            }
+            return;
+          }
+        } else {
+          // 🌐 ROTA PÚBLICA (Landing Page): Busca pelo slug da URL ou prop
+          const searchParams = new URLSearchParams(location.search);
+          const slugAlvo = searchParams.get("slug") || slugProp || "studio-fisio";
+
+          const { data, error: empresaError } = await supabase
+            .from("empresas")
+            .select("*")
+            .eq("slug", slugAlvo)
+            .maybeSingle();
+
+          if (empresaError) throw new Error(empresaError.message);
+          if (!data) throw new Error(`Empresa com slug "${slugAlvo}" não encontrada.`);
+
+          empresaData = data;
+        }
 
         // 2️⃣ Busca os serviços vinculados ao ID da empresa
         const { data: servicosData, error: servicosError } = await supabase
@@ -262,7 +345,7 @@ export function ProfessionalProvider({
     return () => {
       cancelado = true;
     };
-  }, [slug, tick]);
+  }, [location.pathname, location.search, slugProp, user?.id, authLoading, tick]);
 
   // ── Injeta cor primária como CSS variable ──────────────────────────────────
   useEffect(() => {

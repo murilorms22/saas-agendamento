@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ProfessionalProvider } from "./store/useProfessional";
 import { AuthGuard } from "./components/AuthGuard";
 import RootLayout from "./layouts/RootLayout";
 import AdminLayout from "./layouts/AdminLayout";
@@ -13,29 +14,31 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Área Pública — Tela de Agendamento do Cliente */}
-          <Route path="/" element={<RootLayout />}>
-            <Route index element={<LandingPage />} />
-          </Route>
+        <ProfessionalProvider>
+          <Routes>
+            {/* Área Pública — Tela de Agendamento do Cliente */}
+            <Route path="/" element={<RootLayout />}>
+              <Route index element={<LandingPage />} />
+            </Route>
 
-          {/* Autenticação do Profissional */}
-          <Route path="/login" element={<LoginPage />} />
+            {/* Autenticação do Profissional */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Painel do Profissional (Protegido com AuthGuard) */}
-          <Route
-            path="/admin"
-            element={
-              <AuthGuard>
-                <AdminLayout />
-              </AuthGuard>
-            }
-          >
-            <Route index element={<PainelInicial />} />
-            <Route path="resumo" element={<AdminDashboard />} />
-            <Route path="agenda" element={<AgendaProfissional />} />
-          </Route>
-        </Routes>
+            {/* Painel do Profissional (Protegido com AuthGuard) */}
+            <Route
+              path="/admin"
+              element={
+                <AuthGuard>
+                  <AdminLayout />
+                </AuthGuard>
+              }
+            >
+              <Route index element={<PainelInicial />} />
+              <Route path="resumo" element={<AdminDashboard />} />
+              <Route path="agenda" element={<AgendaProfissional />} />
+            </Route>
+          </Routes>
+        </ProfessionalProvider>
       </AuthProvider>
     </BrowserRouter>
   );

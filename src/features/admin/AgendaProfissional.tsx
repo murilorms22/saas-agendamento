@@ -1529,6 +1529,11 @@ function AgendaConteudo() {
   };
 
   const handleAtualizarAgendamento = async (editado: AgendamentoSemana) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao atualizar agendamento.");
+      return;
+    }
+
     // Trava de segurança: verifica se a alteração de horário colide com outro agendamento
     const conflitoExistente = agendamentos.find(
       (a) => a.data === editado.data && a.horario === editado.horario && a.id !== editado.id && a.status !== "Cancelado"
@@ -1544,7 +1549,7 @@ function AgendaConteudo() {
       prev.map((a) => (a.id === editado.id ? editado : a))
     );
 
-    // Persiste no Supabase
+    // Persiste no Supabase com trava de escopo
     try {
       await supabase
         .from("agendamentos")
@@ -1556,33 +1561,52 @@ function AgendaConteudo() {
           horario: editado.horario,
           status: editado.status,
         })
-        .eq("id", editado.id);
+        .eq("id", editado.id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao atualizar agendamento no Supabase:", err);
     }
   };
 
   const handleExcluirAgendamento = async (id: string) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao excluir agendamento.");
+      return;
+    }
+
     // Atualização otimista (remove da agenda)
     setAgendamentos((prev) => prev.filter((a) => a.id !== id));
 
-    // Exclui da tabela agendamentos (o cliente permanece na tabela clientes intacto)
+    // Exclui da tabela agendamentos com trava de escopo
     try {
-      await supabase.from("agendamentos").delete().eq("id", id);
+      await supabase
+        .from("agendamentos")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao excluir agendamento do Supabase:", err);
     }
   };
 
   const handleAtualizarStatus = async (id: string, novoStatus: StatusAgendamento) => {
+    if (!profissional?.id) {
+      console.error("[Segurança] Contexto da empresa ausente ao atualizar status.");
+      return;
+    }
+
     // Atualização otimista
     setAgendamentos((prev) =>
       prev.map((ag) => (ag.id === id ? { ...ag, status: novoStatus } : ag))
     );
 
-    // Persiste no Supabase
+    // Persiste no Supabase com trava de escopo
     try {
-      await supabase.from("agendamentos").update({ status: novoStatus }).eq("id", id);
+      await supabase
+        .from("agendamentos")
+        .update({ status: novoStatus })
+        .eq("id", id)
+        .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao atualizar status no Supabase:", err);
     }
