@@ -1,4 +1,4 @@
-import { Outlet, Link } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { CalendarCheck, Loader2 } from "lucide-react";
 import { useProfessional } from "../store/useProfessional";
 
@@ -28,17 +28,9 @@ export default function RootLayout() {
             {isLoading ? "Carregando..." : nomeClinica}
           </span>
         </div>
-        <nav className="flex items-center gap-3">
-          <Link
-            to="/login"
-            className="text-xs font-body font-semibold text-muted-foreground hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
-          >
-            Acesso Profissional
-          </Link>
-          <button className="bg-primary text-primary-foreground px-5 py-2 rounded-full font-body font-semibold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all">
-            Agendar Consulta
-          </button>
-        </nav>
+        <div className="text-xs font-body font-semibold text-muted-foreground">
+          {profissao}
+        </div>
       </header>
 
       {/* Conteúdo Principal */}
@@ -47,19 +39,11 @@ export default function RootLayout() {
       </main>
 
       {/* Rodapé */}
-      <footer className="border-t border-border py-2 px-6 bg-background text-foreground/50 text-center flex justify-between items-center text-xs">
+      <footer className="border-t border-border py-2.5 px-6 bg-background text-foreground/50 text-center flex justify-between items-center text-xs">
         <div className="font-display font-bold tracking-tight text-primary">
           {nomeClinica}
         </div>
-        <div className="flex items-center gap-4">
-          <p className="font-body">{profissao}</p>
-          <Link
-            to="/login"
-            className="font-body text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors"
-          >
-            Área do Profissional
-          </Link>
-        </div>
+        <p className="font-body text-muted-foreground">{profissao}</p>
       </footer>
     </div>
   );
