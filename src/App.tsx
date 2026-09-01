@@ -20,6 +20,7 @@ function App() {
             {/* Área Pública — Tela de Agendamento do Cliente */}
             <Route path="/" element={<RootLayout />}>
               <Route index element={<LandingPage />} />
+              <Route path=":slug" element={<LandingPage />} />
             </Route>
 
             {/* Autenticação do Profissional */}

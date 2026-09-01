@@ -352,9 +352,14 @@ export function ProfessionalProvider({
             return;
           }
         } else {
-          // 🌐 ROTA PÚBLICA (Landing Page): Busca pelo slug da URL ou prop
+          // 🌐 ROTA PÚBLICA (Landing Page): Busca pelo slug da URL (/:slug), query param (?slug=) ou prop
+          const pathSegments = location.pathname.split("/").filter(Boolean);
+          const slugFromPath =
+            pathSegments.length === 1 && !["admin", "login"].includes(pathSegments[0])
+              ? pathSegments[0]
+              : null;
           const searchParams = new URLSearchParams(location.search);
-          const slugAlvo = searchParams.get("slug") || slugProp || "studio-fisio";
+          const slugAlvo = slugFromPath || searchParams.get("slug") || slugProp || "studio-fisio";
 
           const { data, error: empresaError } = await supabase
             .from("empresas")

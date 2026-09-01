@@ -1,96 +1,200 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   format,
-  addDays,
   addMonths,
   subMonths,
-  startOfMonth,
-  endOfMonth,
   startOfWeek,
   endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addDays,
   isSameMonth,
   isSameDay,
-  isBefore,
-  startOfDay,
+  isToday,
+  isPast,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, AlertTriangle, X, User, LogOut } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  CalendarDays,
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  ArrowLeft,
+  CalendarCheck,
+  Sparkles,
+  UserCheck,
+  ShieldCheck,
+  LogOut,
+  Mail,
+  Lock,
+  Loader2,
+  Calendar as CalendarIcon,
+  Receipt,
+  RotateCcw,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useProfessional } from "../../store/useProfessional";
+import { useProfessional, type Servico } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
-import { ModalAuthPaciente, type ClienteAutenticado } from "../../components/ModalAuthPaciente";
 import { supabase } from "../../lib/supabase";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Variantes do overlay colorido
-// Fluxo:  "esquerda" → visível ("centro") → "direita"
-//
-//  Estado inicial (card ativo):   entra pela esquerda
-//  Estado saindo (card inativo):  sai pela direita
-// ─────────────────────────────────────────────────────────────────────────────
-const overlayVariants: any = {
-  /** Overlay aguardando fora da tela (à esquerda) */
-  esquerda: { x: "-100%", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } },
-  /** Overlay totalmente visível, cobrindo o card */
-  centro: { x: "0%", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } },
-  /** Overlay saindo para a direita */
-  direita: { x: "100%", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } },
-};
-
 export default function LandingPage() {
-  return <PageLoader><LandingPageConteudo /></PageLoader>;
+  return (
+    <PageLoader>
+      <FluxoAgendamentoConteudo />
+    </PageLoader>
+  );
 }
 
-function LandingPageConteudo() {
-  const { profissional: profissionalOuNull } = useProfessional();
-  const profissional = profissionalOuNull!; // seguro: PageLoader garante não-null
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipos & Etapas do Stepper
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // Autenticação do Paciente
+type EtapaFluxo = 1 | 2 | 3 | 4;
+
+interface ClienteAutenticado {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  telefone: string;
+  email?: string | null;
+  cpf?: string | null;
+  auth_user_id?: string | null;
+}
+
+const ETAPAS = [
+  { numero: 1, label: "Serviço", icone: Sparkles, descricao: "Escolha o atendimento" },
+  { numero: 2, label: "Data e Hora", icone: CalendarDays, descricao: "Escolha o melhor horário" },
+  { numero: 3, label: "Identificação", icone: UserCheck, descricao: "Seus dados de contato" },
+  { numero: 4, label: "Confirmação", icone: Receipt, descricao: "Revise e confirme" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers de Sanitização e Validação
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Validação estrita de CPF via Módulo 11 (dois dígitos verificadores) */
+function validarCPF(cpf: string): boolean {
+  const limpo = cpf.replace(/\D/g, "");
+  if (limpo.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(limpo)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i++) {
+    soma += parseInt(limpo.charAt(i), 10) * (10 - i);
+  }
+  let resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(limpo.charAt(9), 10)) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i++) {
+    soma += parseInt(limpo.charAt(i), 10) * (11 - i);
+  }
+  resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(limpo.charAt(10), 10)) return false;
+
+  return true;
+}
+
+function mascararTelefone(valor: string): string {
+  const digitos = valor.replace(/\D/g, "").slice(0, 11);
+  if (digitos.length <= 2) return digitos ? `(${digitos}` : "";
+  if (digitos.length <= 6) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  if (digitos.length <= 10) return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 6)}-${digitos.slice(6)}`;
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7, 11)}`;
+}
+
+function mascararCPF(valor: string): string {
+  const digitos = valor.replace(/\D/g, "").slice(0, 11);
+  if (digitos.length <= 3) return digitos;
+  if (digitos.length <= 6) return `${digitos.slice(0, 3)}.${digitos.slice(3)}`;
+  if (digitos.length <= 9) return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6)}`;
+  return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9, 11)}`;
+}
+
+function sanitizarTexto(valor: string): string {
+  if (!valor) return "";
+  let limpo = valor.replace(/<[^>]*>?/gm, "");
+  limpo = limpo.replace(/^[=+\-@|;`]+/, "");
+  limpo = limpo.replace(/[^\p{L}\s'’-]/gu, "");
+  return limpo.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function sanitizarTelefone(valor: string): string {
+  if (!valor) return "";
+  return valor.replace(/\D/g, "").slice(0, 11);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Componente Principal de Conteúdo
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FluxoAgendamentoConteudo() {
+  const { profissional: profissionalNullable } = useProfessional();
+  const profissional = profissionalNullable!; // seguro: PageLoader garante não-null
   const { user, signOut } = useAuth();
-  const [modalAuthAberto, setModalAuthAberto] = useState(false);
-  const [clienteLogado, setClienteLogado] = useState<ClienteAutenticado | null>(null);
 
-  const [etapa, setEtapa] = useState<"selecao" | "formulario">("selecao");
-  const [servicoSelecionado, setServicoSelecionado] = useState<number | null>(null);
+  // ── Estados do Stepper ──
+  const [passoAtual, setPassoAtual] = useState<EtapaFluxo>(1);
+  const [servicoEscolhido, setServicoEscolhido] = useState<Servico | null>(null);
 
-  // Estado do Calendário
+  // ── Etapa 2: Data e Horário ──
   const [mesAtual, setMesAtual] = useState<Date>(startOfMonth(new Date()));
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null);
-
-  // Estado do Formulário
-  const [nome, setNome] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [enviado, setEnviado] = useState(false);
-
-  // Trava de Segurança: Horários já reservados
   const [horariosOcupados, setHorariosOcupados] = useState<string[]>([]);
-  const [erroConflito, setErroConflito] = useState<string | null>(null);
+  const [carregandoHorarios, setCarregandoHorarios] = useState(false);
 
-  // Alerta Visual (Toast de Warning / Erro)
+  // ── Etapa 3: Identificação / Autenticação ──
+  const [clienteLogado, setClienteLogado] = useState<ClienteAutenticado | null>(null);
+  const [abaAuth, setAbaAuth] = useState<"login" | "cadastro">("cadastro");
+
+  // Formulário de Login
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginSenha, setLoginSenha] = useState("");
+
+  // Formulário de Cadastro
+  const [cadNome, setCadNome] = useState("");
+  const [cadWhatsapp, setCadWhatsapp] = useState("");
+  const [cadCpf, setCadCpf] = useState("");
+  const [cadEmail, setCadEmail] = useState("");
+  const [cadSenha, setCadSenha] = useState("");
+
+  // ── Etapa 4: Confirmação & Submissão ──
+  const [salvando, setSalvando] = useState(false);
+  const [sucessoFinal, setSucessoFinal] = useState(false);
+
+  // ── Toast de Feedback ──
   const [toast, setToast] = useState<{
-    tipo: "warning" | "error" | "info";
+    tipo: "warning" | "error" | "info" | "success";
     mensagem: string;
   } | null>(null);
 
-  const exibirToast = (mensagem: string, tipo: "warning" | "error" | "info" = "warning") => {
+  const exibirToast = (
+    mensagem: string,
+    tipo: "warning" | "error" | "info" | "success" = "warning"
+  ) => {
     setToast({ tipo, mensagem });
   };
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 7000);
+    const timer = setTimeout(() => setToast(null), 5500);
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Escuta de Sessão no Mount: reconhece automaticamente o paciente para esta clínica
+  // ── Reconhecimento Automático de Sessão do Paciente ──
   useEffect(() => {
     let ativo = true;
 
-    async function carregarClienteAutenticado() {
+    async function buscarPacienteAutenticado() {
       if (!user?.id || !profissional?.id) {
         setClienteLogado(null);
         return;
@@ -108,967 +212,1167 @@ function LandingPageConteudo() {
 
         if (cliente) {
           setClienteLogado(cliente);
-          if (cliente.nome) setNome(cliente.nome);
-          if (cliente.telefone) setWhatsapp(mascararTelefone(cliente.telefone));
+          setCadNome(cliente.nome);
+          setCadWhatsapp(mascararTelefone(cliente.telefone));
+          if (cliente.cpf) setCadCpf(mascararCPF(cliente.cpf));
+          if (cliente.email) setCadEmail(cliente.email);
         } else {
-          // Edge Case: Usuário logado no Auth, mas não cadastrado como cliente nesta clínica
           setClienteLogado(null);
         }
       } catch (err) {
-        console.error("[LandingPage] Erro ao carregar paciente autenticado:", err);
-        if (ativo) setClienteLogado(null);
+        console.error("[LandingPage] Erro ao buscar dados do paciente:", err);
       }
     }
 
-    carregarClienteAutenticado();
+    buscarPacienteAutenticado();
 
     return () => {
       ativo = false;
     };
   }, [user?.id, profissional?.id]);
 
-  // Busca em tempo real os horários já agendados para a data selecionada
+  // ── Busca de Horários Ocupados do Banco para a Data Selecionada ──
   useEffect(() => {
+    let ativo = true;
+
     async function buscarOcupados() {
-      if (!profissional?.id || !dataSelecionada) return;
+      if (!dataSelecionada || !profissional?.id) return;
+      setCarregandoHorarios(true);
+
       const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
       try {
-        const { data: ags } = await supabase
+        const { data, error } = await supabase
           .from("agendamentos")
-          .select("horario, data, data_hora_agendamento, status")
+          .select("horario, status")
           .eq("empresa_id", profissional.id)
+          .eq("data", dataStr)
           .neq("status", "Cancelado");
 
-        if (ags) {
-          const ocupados = ags
-            .filter((a: any) => {
-              const d = a.data ?? (a.data_hora_agendamento ? a.data_hora_agendamento.split("T")[0] : "");
-              return d === dataStr;
-            })
-            .map((a: any) => {
-              if (a.horario) return a.horario;
-              if (a.data_hora_agendamento) {
-                const parte = a.data_hora_agendamento.split("T")[1];
-                if (parte) return parte.slice(0, 5);
-              }
-              return null;
-            })
-            .filter(Boolean) as string[];
+        if (!ativo) return;
 
+        if (!error && data) {
+          const ocupados = data
+            .map((item: any) => item.horario?.slice(0, 5))
+            .filter(Boolean);
           setHorariosOcupados(ocupados);
-
-          // Se o horário selecionado acabou de ser ocupado, desmarca
-          setHorarioSelecionado((prev) => (prev && ocupados.includes(prev) ? null : prev));
+        } else {
+          setHorariosOcupados([]);
         }
       } catch (err) {
-        console.error("Erro ao buscar horários ocupados:", err);
+        console.error("[LandingPage] Erro ao consultar horários ocupados:", err);
+      } finally {
+        if (ativo) setCarregandoHorarios(false);
       }
     }
 
     buscarOcupados();
 
-    // Escuta em tempo real se alguém agendar para bloquear na hora
-    const channel = supabase
-      .channel("landing-conflitos-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agendamentos" },
-        () => {
-          buscarOcupados();
-        }
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(channel);
+      ativo = false;
     };
   }, [dataSelecionada, profissional?.id]);
 
-  // Máscara de telefone: (DDD) 00000-0000
-  const mascararTelefone = (valor: string): string => {
-    // Remove tudo que não for dígito
-    const digitos = valor.replace(/\D/g, "").slice(0, 11);
+  // ── Cálculo dos Slots Disponíveis do Dia com base na Disponibilidade ──
+  const slotsDoDia = useMemo(() => {
+    const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
-    if (digitos.length === 0) return "";
-    if (digitos.length <= 2)  return `(${digitos}`;
-    if (digitos.length <= 6)  return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
-    if (digitos.length <= 10) return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 6)}-${digitos.slice(6)}`;
-    // 11 dígitos → celular com 9 na frente
-    return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
-  };
+    // 1. Checa se o dia é um bloqueio ou folga configurada
+    const bloqueios = profissional.disponibilidade?.bloqueios as
+      | Array<{ data: string; motivo: string }>
+      | undefined;
+    if (bloqueios) {
+      const b = bloqueios.find((item) => item.data === dataStr);
+      if (b) {
+        return { slots: [], bloqueado: true, motivo: b.motivo || "Data indisponível" };
+      }
+    }
 
-  /**
-   * Sanitiza o nome do cliente contra XSS, HTML Injection e CSV Injection.
-   * Suporta caracteres Unicode \p{L} (permitindo acentos pt-BR como João, Conceição, d'Ávila),
-   * espaços, apóstrofos e hífens, mas arranca violentamente < > = ; |.
-   * Limita a 80 caracteres via .slice().
-   */
-  const sanitizarTexto = (valor: string): string => {
-    if (!valor) return "";
+    // 2. Checa horários do dia da semana e remove intervalos
+    const mapaDias: Array<"dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"> = [
+      "dom",
+      "seg",
+      "ter",
+      "qua",
+      "qui",
+      "sex",
+      "sab",
+    ];
+    const diaSemana = mapaDias[dataSelecionada.getDay()];
+    const configDia = profissional.disponibilidade?.horarios?.[diaSemana];
 
-    // 1. Remove qualquer tag HTML/script
-    let limpo = valor.replace(/<[^>]*>?/gm, "");
+    if (configDia) {
+      if (!configDia.ativo) {
+        return { slots: [], bloqueado: true, motivo: "Sem atendimento neste dia da semana" };
+      }
 
-    // 2. Remove gatilhos de injeção de fórmulas CSV/Excel no início (=, +, -, @, |, ;, `)
-    limpo = limpo.replace(/^[=+\-@|;`]+/, "");
+      const [hIni] = (configDia.inicio || "08:00").split(":").map(Number);
+      const [hFim] = (configDia.fim || "18:00").split(":").map(Number);
 
-    // 3. Permite estritamente: letras Unicode (\p{L}), espaços (\s), apóstrofos (' ’) e hífens (-)
-    limpo = limpo.replace(/[^\p{L}\s'’-]/gu, "");
+      let hIntIni = -1;
+      let hIntFim = -1;
+      if (configDia.temIntervalo && configDia.intervaloInicio && configDia.intervaloFim) {
+        hIntIni = Number(configDia.intervaloInicio.split(":")[0]);
+        hIntFim = Number(configDia.intervaloFim.split(":")[0]);
+      }
 
-    // 4. Normaliza espaços múltiplos e trunca para 80 caracteres
-    return limpo.replace(/\s+/g, " ").trim().slice(0, 80);
-  };
+      const slots: string[] = [];
+      for (let h = hIni; h < hFim; h++) {
+        // Exclui os horários de almoço / intervalo configurados
+        if (configDia.temIntervalo && h >= hIntIni && h < hIntFim) {
+          continue;
+        }
+        slots.push(`${String(h).padStart(2, "0")}:00`);
+      }
 
-  /**
-   * Sanitiza o telefone removendo qualquer caractere não numérico,
-   * garantindo que apenas números cheguem ao banco de dados Supabase (máximo 11 dígitos).
-   */
-  const sanitizarTelefone = (valor: string): string => {
-    if (!valor) return "";
-    return valor.replace(/\D/g, "").slice(0, 11);
-  };
+      return { slots, bloqueado: false };
+    }
 
-  // Ref para scroll automático ao card 2
-  const cardDataHoraRef = useRef<HTMLDivElement>(null);
+    // Fallback padrão
+    return {
+      slots: profissional.horariosDisponiveis || [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "13:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00",
+      ],
+      bloqueado: false,
+    };
+  }, [dataSelecionada, profissional.disponibilidade, profissional.horariosDisponiveis]);
 
-  // ── Lógica do Calendário ────────────────────────────────────────────────────
+  // ── Calendário: Helpers de Navegação ──
   const proximoMes = () => setMesAtual(addMonths(mesAtual, 1));
   const mesAnterior = () => setMesAtual(subMonths(mesAtual, 1));
 
-  const renderizarDias = (colorado?: boolean) => {
-    const inicio = startOfWeek(mesAtual, { locale: ptBR });
-    return (
-      <div className="grid grid-cols-7 mb-2">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div
-            key={i}
-            className={`text-center font-body text-[10px] font-bold pb-2 uppercase tracking-wider transition-colors duration-500 ${
-              colorado ? "text-white/60" : "text-muted-foreground"
-            }`}
-          >
-            {format(addDays(inicio, i), "EEEEEE", { locale: ptBR })}
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // ── Ações de Autenticação Inline (Etapa 3) ──
 
-  const renderizarCelulas = (textoForçado?: boolean) => {
-    const inicioMes = startOfMonth(mesAtual);
-    const fimMes = endOfMonth(inicioMes);
-    const inicio = startOfWeek(inicioMes, { locale: ptBR });
-    const fim = endOfWeek(fimMes, { locale: ptBR });
-
-    const linhas = [];
-    let dias: React.ReactNode[] = [];
-    let dia = inicio;
-
-    while (dia <= fim) {
-      for (let i = 0; i < 7; i++) {
-        const diaClone = dia;
-        const passado = isBefore(dia, startOfDay(new Date()));
-        const mesCorrente = isSameMonth(dia, inicioMes);
-        const selecionado = isSameDay(dia, dataSelecionada);
-
-        dias.push(
-          <button
-            key={dia.toString()}
-            disabled={passado || !mesCorrente}
-            onClick={() => {
-              setDataSelecionada(diaClone);
-              setHorarioSelecionado(null);
-            }}
-            className={`h-9 w-9 mx-auto rounded-full flex items-center justify-center font-body text-xs font-semibold transition-all
-              ${!mesCorrente ? "text-transparent pointer-events-none" : ""}
-              ${passado && mesCorrente ? (textoForçado ? "text-white/30 cursor-not-allowed" : "text-muted-foreground/40 cursor-not-allowed") : ""}
-              ${selecionado ? (textoForçado ? "bg-white/25 text-white shadow-md" : "bg-primary text-primary-foreground shadow-md shadow-primary/30") : ""}
-              ${!selecionado && !passado && mesCorrente ? (textoForçado ? "hover:bg-white/15 text-white" : "hover:bg-primary/10 text-foreground") : ""}
-            `}
-          >
-            {format(dia, "d")}
-          </button>
-        );
-        dia = addDays(dia, 1);
-      }
-      linhas.push(
-        <div className="grid grid-cols-7 gap-1 mb-1" key={dia.toString()}>
-          {dias}
-        </div>
-      );
-      dias = [];
-    }
-    return <div>{linhas}</div>;
-  };
-
-  // ── Selecionar Serviço + scroll automático ──────────────────────────────────
-  const handleSelecionarServico = (id: number) => {
-    const eraVazio = servicoSelecionado === null;
-    setServicoSelecionado(id);
-
-    // Scroll automático para o card de Data/Hora somente na primeira seleção
-    if (eraVazio) {
-      setTimeout(() => {
-        cardDataHoraRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 350); // pequeno delay para a animação começar antes do scroll
-    }
-  };
-
-  // ── Ações ───────────────────────────────────────────────────────────────────
-  const handleContinuar = () => {
-    if (!servicoSelecionado || !dataSelecionada || !horarioSelecionado) return;
-
-    // 🛡️ Se o paciente não tiver registro de cliente nesta clínica, abre o modal de autenticação
-    if (!clienteLogado) {
-      setModalAuthAberto(true);
-      return;
-    }
-
-    // Com o clienteLogado reconhecido, contorna totalmente o modal e vai para a confirmação direta
-    setEtapa("formulario");
-  };
-
-  const handleAuthSucesso = (cliente: ClienteAutenticado) => {
-    setClienteLogado(cliente);
-    if (cliente.nome) setNome(cliente.nome);
-    if (cliente.telefone) setWhatsapp(mascararTelefone(cliente.telefone));
-    setModalAuthAberto(false);
-    setEtapa("formulario");
-  };
-
-  const [salvando, setSalvando] = useState(false);
-
-  const servicoEscolhido = profissional.servicos.find((s) => String(s.id) === String(servicoSelecionado));
-
-  const handleEnviar = async (e: React.FormEvent) => {
+  const handleLoginInline = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (salvando) return; // 🛡️ Brecha 3: Bloqueio instantâneo contra Race Condition
-
-    // 🛡️ Se não houver cliente logado para esta clínica, abre o modal
-    if (!clienteLogado) {
-      setModalAuthAberto(true);
+    const emailLimpo = loginEmail.trim().toLowerCase();
+    if (!emailLimpo || !loginSenha) {
+      exibirToast("Informe seu e-mail e senha para entrar.", "warning");
       return;
     }
 
     setSalvando(true);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailLimpo,
+        password: loginSenha,
+      });
+
+      if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          exibirToast("E-mail ou senha incorretos.", "error");
+        } else {
+          exibirToast(`Falha no login: ${authError.message}`, "error");
+        }
+        setSalvando(false);
+        return;
+      }
+
+      // Busca cliente na tabela
+      const { data: cliente } = await supabase
+        .from("clientes")
+        .select("*")
+        .eq("empresa_id", profissional.id)
+        .eq("auth_user_id", authData.user.id)
+        .maybeSingle();
+
+      const clienteFinal: ClienteAutenticado = cliente ?? {
+        id: authData.user.id,
+        empresa_id: profissional.id,
+        nome: authData.user.user_metadata?.full_name || "Paciente",
+        telefone: "",
+        email: authData.user.email,
+        auth_user_id: authData.user.id,
+      };
+
+      setClienteLogado(clienteFinal);
+      setPassoAtual(4); // Avança direto para a confirmação
+    } catch (err) {
+      console.error("[LandingPage] Erro no login:", err);
+      exibirToast("Erro de conexão ao autenticar.", "error");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleCadastroInline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nomeLimpo = sanitizarTexto(cadNome);
+    const telefoneLimpo = sanitizarTelefone(cadWhatsapp);
+    const cpfLimpo = cadCpf.replace(/\D/g, "");
+    const emailLimpo = cadEmail.trim().toLowerCase();
+
+    if (!nomeLimpo || nomeLimpo.length < 3) {
+      exibirToast("Informe seu nome completo (pelo menos 3 letras).", "warning");
+      return;
+    }
+    if (!telefoneLimpo || telefoneLimpo.length < 10) {
+      exibirToast("Informe um número de WhatsApp válido com DDD.", "warning");
+      return;
+    }
+    if (!validarCPF(cpfLimpo)) {
+      exibirToast("O CPF informado é inválido. Verifique os números digitados.", "warning");
+      return;
+    }
+    if (cadSenha.length < 6) {
+      exibirToast("A senha deve conter no mínimo 6 caracteres.", "warning");
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      // 1. Supabase Auth SignUp
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailLimpo,
+        password: cadSenha,
+        options: {
+          data: {
+            full_name: nomeLimpo,
+            telefone: telefoneLimpo,
+          },
+        },
+      });
+
+      if (authError) {
+        if (authError.message.includes("User already registered")) {
+          exibirToast("Este e-mail já possui cadastro. Use a aba 'Já tenho conta' para entrar.", "info");
+          setAbaAuth("login");
+          setLoginEmail(emailLimpo);
+        } else if (authError.message.toLowerCase().includes("rate limit")) {
+          exibirToast("Muitas tentativas recentes. Aguarde instantes antes de tentar novamente.", "warning");
+        } else {
+          exibirToast(`Erro no cadastro: ${authError.message}`, "error");
+        }
+        setSalvando(false);
+        return;
+      }
+
+      if (!authData.user) {
+        exibirToast("Não foi possível criar sua conta. Tente novamente.", "error");
+        setSalvando(false);
+        return;
+      }
+
+      // 2. Grava na tabela clientes
+      const { data: clienteCriado, error: errCliente } = await supabase
+        .from("clientes")
+        .insert({
+          empresa_id: profissional.id,
+          nome: nomeLimpo,
+          telefone: telefoneLimpo,
+          email: emailLimpo,
+          cpf: cpfLimpo,
+          auth_user_id: authData.user.id,
+        })
+        .select()
+        .single();
+
+      if (errCliente) {
+        console.warn("[LandingPage] Aviso ao criar registro de cliente:", errCliente.message);
+      }
+
+      const clienteFinal: ClienteAutenticado = clienteCriado ?? {
+        id: authData.user.id,
+        empresa_id: profissional.id,
+        nome: nomeLimpo,
+        telefone: telefoneLimpo,
+        email: emailLimpo,
+        cpf: cpfLimpo,
+        auth_user_id: authData.user.id,
+      };
+
+      setClienteLogado(clienteFinal);
+      setPassoAtual(4); // Avança direto para a confirmação
+    } catch (err) {
+      console.error("[LandingPage] Erro inesperado ao cadastrar:", err);
+      exibirToast("Erro de conexão ao processar cadastro.", "error");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // ── Etapa 4: Finalização do Agendamento ──
+  const handleConfirmarAgendamento = async () => {
+    if (!servicoEscolhido || !dataSelecionada || !horarioSelecionado || !clienteLogado) {
+      exibirToast("Dados incompletos para confirmar o agendamento.", "error");
+      return;
+    }
+
+    setSalvando(true);
+    const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
     try {
-      const nomeEfetivo = clienteLogado.nome || nome;
-      const telefoneEfetivo = clienteLogado.telefone || whatsapp;
-
-      // 🛡️ Brecha 2: Sanitização estrita anti-XSS e anti-CSV Injection
-      const nomeSanitizado = sanitizarTexto(nomeEfetivo);
-      const telefoneSanitizado = sanitizarTelefone(telefoneEfetivo);
-
-      if (!nomeSanitizado || nomeSanitizado.length < 2) {
-        exibirToast("Nome do paciente incompleto. Por favor, atualize seus dados.", "error");
-        setSalvando(false);
-        return;
-      }
-
-      if (!telefoneSanitizado || telefoneSanitizado.length < 10) {
-        exibirToast("WhatsApp do paciente incompleto. Por favor, atualize seus dados.", "error");
-        setSalvando(false);
-        return;
-      }
-
-      const dataStr = format(dataSelecionada, "yyyy-MM-dd");
-
-      // Valida servico_id para ser UUID válido ou null
-      const servicoIdUuid = servicoEscolhido?.id && String(servicoEscolhido.id).includes("-")
-        ? String(servicoEscolhido.id)
-        : null;
-
-      const dataHoraIso = `${dataStr}T${horarioSelecionado ?? "08:00"}:00Z`;
-
-      // Trava de Segurança: Garante que ninguém agendou nesse meio tempo
-      const { data: conflitos } = await supabase
+      // 🛡️ 1. Trava de Concorrência: Checa conflito no banco
+      const { data: conflitos, error: errConflito } = await supabase
         .from("agendamentos")
-        .select("id, status")
+        .select("id")
         .eq("empresa_id", profissional.id)
         .eq("data", dataStr)
-        .eq("horario", horarioSelecionado ?? "08:00")
+        .eq("horario", horarioSelecionado)
         .neq("status", "Cancelado")
         .limit(1);
 
-      if (conflitos && conflitos.length > 0) {
-        exibirToast(
-          "Este horário já foi preenchido por outro agendamento. Por favor, escolha outro horário disponível.",
-          "warning"
-        );
-        setSalvando(false);
-        setEtapa("selecao");
+      if (!errConflito && conflitos && conflitos.length > 0) {
+        exibirToast(`O horário das ${horarioSelecionado} acabou de ser reservado. Escolha outro horário.`, "warning");
+        setPassoAtual(2);
+        setHorariosOcupados((prev) => [...prev, horarioSelecionado]);
         setHorarioSelecionado(null);
+        setSalvando(false);
         return;
       }
 
-      // 2. 🛡️ Dispara a função de insert diretamente vinculada ao clienteLogado.id
-      const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
+      // 🛡️ 2. Inserção Segura do Agendamento
+      const dataHoraIso = `${dataStr}T${horarioSelecionado}:00Z`;
+
+      const { error: insertError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
-        cliente_id: clienteLogado.id, // Vínculo direto e estrito com o paciente reconhecido
-        nome_cliente: nomeSanitizado,
-        whatsapp_cliente: telefoneSanitizado,
-        cliente_telefone: telefoneSanitizado,
-        servico_id: servicoIdUuid,
-        servico_nome: servicoEscolhido?.nome ?? "Consulta",
+        cliente_id: clienteLogado.id,
+        nome_cliente: clienteLogado.nome,
+        whatsapp_cliente: clienteLogado.telefone,
+        cliente_telefone: clienteLogado.telefone,
+        servico_id: servicoEscolhido.id,
+        servico_nome: servicoEscolhido.nome,
         data: dataStr,
-        horario: horarioSelecionado ?? "08:00",
+        horario: horarioSelecionado,
         data_hora_agendamento: dataHoraIso,
         status: "Pendente",
-      }).select().single();
+      });
 
-      if (agError) {
-        console.error("Erro ao salvar agendamento no Supabase:", agError);
+      if (insertError) {
+        console.error("[LandingPage] Erro ao gravar agendamento:", insertError);
+        const textoErro = insertError.message || insertError.details || "";
 
-        // Verifica se a trigger disparou o erro de limite máximo de 3 agendamentos
-        const textoErro = `${agError.message || ""} ${agError.details || ""} ${agError.hint || ""}`;
-        const ehLimiteMaximo = /limite m[aá]ximo de 3 agendamentos/i.test(textoErro);
-
-        if (ehLimiteMaximo) {
+        // 🛡️ Captura da Trigger de Limite de 3 Agendamentos
+        if (/limite m[aá]ximo de 3 agendamentos/i.test(textoErro)) {
           exibirToast(
             "Você já possui 3 agendamentos ativos. Aguarde a finalização de uma consulta para agendar novamente.",
             "warning"
           );
         } else {
-          exibirToast(
-            agError.message || "Erro ao confirmar agendamento. Por favor, tente novamente.",
-            "error"
-          );
+          exibirToast(`Falha ao registrar agendamento: ${insertError.message}`, "error");
         }
-
         setSalvando(false);
         return;
       }
 
-      // Notifica abas / componentes locais em tempo real
-      if (agCriado) {
-        window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: agCriado }));
-      }
-
-      setSalvando(false);
-      setEnviado(true);
+      // Sucesso Total!
+      setSucessoFinal(true);
     } catch (err: any) {
-      console.error("Erro ao salvar agendamento no Supabase:", err);
-      const textoErro = `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`;
-      const ehLimiteMaximo = /limite m[aá]ximo de 3 agendamentos/i.test(textoErro);
-
-      if (ehLimiteMaximo) {
-        exibirToast(
-          "Você já possui 3 agendamentos ativos. Aguarde a finalização de uma consulta para agendar novamente.",
-          "warning"
-        );
-      } else {
-        exibirToast(
-          "Ocorreu um erro inesperado ao confirmar o agendamento. Tente novamente.",
-          "error"
-        );
-      }
+      console.error("[LandingPage] Erro inesperado:", err);
+      exibirToast("Erro de conexão ao consolidar agendamento.", "error");
+    } finally {
       setSalvando(false);
     }
   };
 
-  // Determina qual "estado de overlay" cada card está
-  // Card Serviços: começa com cor (centro), quando serviço selecionado → sai (direita)
-  // Card Data/Hora: começa sem cor (esquerda), quando serviço selecionado → entra (centro)
-  const overlayServicos = servicoSelecionado ? "direita" : "centro";
-  const overlayDataHora = servicoSelecionado ? "centro" : "esquerda";
+  const reiniciarFluxo = () => {
+    setPassoAtual(1);
+    setServicoEscolhido(null);
+    setHorarioSelecionado(null);
+    setSucessoFinal(false);
+  };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="h-full w-full bg-gradient-to-br from-background via-background to-primary/5 p-3 md:p-6 overflow-y-auto overflow-x-hidden">
-      <div className="max-w-7xl mx-auto h-full flex flex-col gap-4 md:gap-6">
+    <div className="min-h-full w-full bg-gradient-to-br from-background via-background to-primary/5 py-8 px-4 sm:px-6 lg:px-8 flex flex-col justify-center items-center relative overflow-x-hidden">
+      {/* ── Toast Flutuante de Alertas ── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-floating border backdrop-blur-md text-xs font-body font-semibold max-w-md ${
+              toast.tipo === "warning"
+                ? "bg-amber-500/15 border-amber-500/30 text-amber-900 dark:text-amber-200"
+                : toast.tipo === "error"
+                ? "bg-rose-500/15 border-rose-500/30 text-rose-900 dark:text-rose-200"
+                : toast.tipo === "success"
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+                : "bg-card/90 border-border text-foreground"
+            }`}
+          >
+            {toast.tipo === "warning" && <AlertTriangle size={18} className="text-amber-500 shrink-0" />}
+            {toast.tipo === "error" && <AlertCircle size={18} className="text-rose-500 shrink-0" />}
+            {toast.tipo === "success" && <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />}
+            <span className="leading-snug">{toast.mensagem}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <AnimatePresence mode="wait">
-
-          {/* ── Etapa 1: Seleção de Serviço + Data ── */}
-          {etapa === "selecao" && (
-            <motion.div
-              key="selecao"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col h-full gap-4 md:gap-6"
-            >
-              {/* Linha Superior: Hero (Esquerda) + Serviços (Direita) */}
-              <div className="flex flex-col lg:flex-row gap-4 md:gap-6 lg:h-[40%] min-h-[300px]">
-
-                {/* Hero — sempre colorido */}
-                <div className="lg:w-5/12 bg-gradient-to-br from-primary to-primary/70 rounded-[2rem] p-8 flex flex-col justify-center relative overflow-hidden shadow-soft-lg">
-                  <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
-                  <div className="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-white/5 blur-3xl" />
-                  <div className="relative z-10">
-                    {profissional.logoUrl && (
-                      <div className="mb-4">
-                        <img
-                          src={profissional.logoUrl}
-                          alt={profissional.nomeClinica}
-                          className="h-12 max-w-[180px] object-contain rounded-xl bg-white/15 p-1.5 backdrop-blur-md shadow-xs"
-                        />
-                      </div>
-                    )}
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white font-body text-xs font-bold mb-4 w-fit backdrop-blur-sm">
-                      <CheckCircle2 size={14} />
-                      {profissional.profissao}
-                    </div>
-                    <h1 className="text-4xl xl:text-5xl font-display font-extrabold text-white leading-[1.1] mb-3">
-                      {profissional.tagline}
-                    </h1>
-                    <p className="text-sm font-body text-white/75 mb-6 leading-relaxed max-w-sm">
-                      {profissional.descricao}
-                    </p>
-                    <div className="flex gap-5 items-center mt-auto">
-                      {profissional.stats.map((stat, i) => (
-                        <div key={i} className="flex items-center gap-5">
-                          {i > 0 && <div className="w-px h-8 bg-white/30" />}
-                          <div className="flex flex-col">
-                            <span className="font-display font-bold text-2xl text-white">{stat.valor}</span>
-                            <span className="font-body text-[10px] uppercase font-bold text-white/60">{stat.rotulo}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Card 1: Escolha o Serviço ── */}
-                {/* overflow-hidden fica só no wrapper do overlay, não no card todo */}
-                <div className="flex-1 bg-card rounded-[2rem] shadow-floating border border-border/40 flex flex-col relative">
-
-                  {/* Container clip isolado para o overlay — não corta o conteúdo do card */}
-                  <div className="absolute inset-0 rounded-[2rem] overflow-hidden pointer-events-none z-0">
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80"
-                      variants={overlayVariants}
-                      animate={overlayServicos}
-                      initial="centro"
-                    >
-                      <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-2xl" />
-                      <div className="absolute -bottom-10 -left-6 w-40 h-40 rounded-full bg-white/5 blur-3xl" />
-                    </motion.div>
-                  </div>
-
-                  {/* Conteúdo do Card 1 */}
-                  <div className="relative z-10 p-6 md:p-8 flex flex-col h-full">
-                    <div className="mb-4 flex items-center justify-between">
-                      <motion.h2
-                        className="text-xl font-display font-bold"
-                        animate={{ color: servicoSelecionado ? "hsl(var(--foreground))" : "white" }}
-                        transition={{ duration: 0.4 }}
-                      >
-                        Escolha o Serviço
-                      </motion.h2>
-                      <motion.span
-                        className="text-xs font-body font-semibold px-3 py-1 rounded-full"
-                        animate={{
-                          backgroundColor: servicoSelecionado ? "hsl(var(--primary) / 0.1)" : "rgba(255,255,255,0.2)",
-                          color: servicoSelecionado ? "hsl(var(--primary))" : "white",
-                        }}
-                        transition={{ duration: 0.4 }}
-                      >
-                        Passo 1 de 3
-                      </motion.span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-full">
-                      {profissional.servicos.map((servico) => {
-                        const ativo = servicoSelecionado === servico.id;
-                        return (
-                          <motion.button
-                            key={servico.id}
-                            onClick={() => handleSelecionarServico(servico.id)}
-                            className="flex flex-col justify-between p-5 rounded-2xl text-left h-full transition-all relative overflow-hidden"
-                            animate={{
-                              backgroundColor: ativo
-                                ? "rgba(255,255,255,0.25)"
-                                : servicoSelecionado
-                                ? (ativo ? "rgba(255,255,255,0.25)" : "hsl(var(--background))")
-                                : "rgba(255,255,255,0.08)",
-                              borderColor: ativo
-                                ? "rgba(255,255,255,0.5)"
-                                : servicoSelecionado
-                                ? "hsl(var(--border))"
-                                : "rgba(255,255,255,0.15)",
-                              boxShadow: ativo && !servicoSelecionado
-                                ? "0 0 0 2px rgba(255,255,255,0.3)"
-                                : ativo
-                                ? "0 0 0 2px hsl(var(--primary) / 0.3)"
-                                : "none",
-                            }}
-                            style={{ border: "1px solid transparent" }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <div>
-                              <motion.div
-                                className="w-8 h-8 rounded-full flex items-center justify-center mb-4"
-                                animate={{
-                                  backgroundColor: ativo
-                                    ? "rgba(255,255,255,0.3)"
-                                    : servicoSelecionado
-                                    ? "hsl(var(--primary) / 0.1)"
-                                    : "rgba(255,255,255,0.15)",
-                                  color: servicoSelecionado ? "hsl(var(--primary))" : "white",
-                                }}
-                                transition={{ duration: 0.35 }}
-                              >
-                                <CheckCircle2
-                                  size={16}
-                                  className={ativo ? "opacity-100" : "opacity-0"}
-                                  style={{ transition: "opacity 0.2s" }}
-                                />
-                              </motion.div>
-                              <motion.span
-                                className="block font-body text-sm font-bold mb-1"
-                                animate={{ color: servicoSelecionado ? "hsl(var(--foreground))" : "white" }}
-                                transition={{ duration: 0.4 }}
-                              >
-                                {servico.nome}
-                              </motion.span>
-                              <motion.span
-                                className="font-body text-xs flex items-center gap-1"
-                                animate={{ color: servicoSelecionado ? "hsl(var(--muted-foreground))" : "rgba(255,255,255,0.65)" }}
-                                transition={{ duration: 0.4 }}
-                              >
-                                <Clock size={12} /> {servico.duracao}
-                              </motion.span>
-                            </div>
-                            <motion.span
-                              className="font-display text-lg font-extrabold mt-4"
-                              animate={{ color: servicoSelecionado ? "hsl(var(--primary))" : "white" }}
-                              transition={{ duration: 0.4 }}
-                            >
-                              {servico.preco}
-                            </motion.span>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+      {/* ── Container Card Central com Glassmorphism ── */}
+      <div className="w-full max-w-4xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-[2.5rem] p-6 sm:p-10 shadow-floating flex flex-col transition-all">
+        
+        {/* ── Topo: Identificação da Clínica (Logo / Nome / Especialidade) ── */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-border/40 pb-6 mb-8">
+          <div className="flex items-center gap-3.5 text-center sm:text-left">
+            {profissional.logoUrl ? (
+              <img
+                src={profissional.logoUrl}
+                alt={profissional.nomeClinica}
+                className="h-11 max-w-[140px] object-contain rounded-xl bg-background/80 p-1 border border-border/50 shadow-2xs"
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-display font-black text-lg shadow-inner">
+                {profissional.nomeClinica.charAt(0).toUpperCase()}
               </div>
+            )}
+            <div>
+              <h2 className="font-display font-bold text-foreground text-lg sm:text-xl leading-tight">
+                {profissional.nomeClinica}
+              </h2>
+              <p className="font-body text-xs font-semibold text-primary">
+                {profissional.profissao}
+              </p>
+            </div>
+          </div>
 
-              {/* ── Card 2: Data e Horário ── */}
-              <div
-                ref={cardDataHoraRef}
-                className="rounded-[2rem] shadow-floating border border-border/40 flex flex-col relative min-h-[420px]"
-                style={{ scrollMarginTop: "1.5rem" }}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary font-body text-xs font-bold border border-primary/20">
+            <ShieldCheck size={14} />
+            <span>Agendamento Online Oficial</span>
+          </div>
+        </div>
+
+        {/* Se já foi finalizado com sucesso, exibe tela de celebração */}
+        {sucessoFinal ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="py-10 text-center space-y-6 max-w-md mx-auto"
+          >
+            <div className="w-20 h-20 rounded-full bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center ring-8 ring-emerald-500/10 shadow-soft">
+              <CheckCircle2 size={42} />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-3xl font-display font-extrabold text-foreground">
+                Consulta Agendada!
+              </h2>
+              <p className="text-sm font-body text-muted-foreground">
+                Seu agendamento foi registrado com sucesso. Aguardamos você no dia e horário escolhidos!
+              </p>
+            </div>
+
+            {/* Recibo Rápido do Sucesso */}
+            <div className="p-5 rounded-2xl bg-secondary/40 border border-border/60 text-left space-y-3 font-body text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground font-bold">Serviço:</span>
+                <span className="font-bold text-foreground">{servicoEscolhido?.nome}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground font-bold">Data & Horário:</span>
+                <span className="font-bold text-primary capitalize">
+                  {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground font-bold">Paciente:</span>
+                <span className="font-bold text-foreground">{clienteLogado?.nome}</span>
+              </div>
+            </div>
+
+            <div className="pt-4 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={reiniciarFluxo}
+                className="flex-1 py-3.5 rounded-xl bg-secondary hover:bg-secondary/80 font-body font-bold text-xs text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                {/* Container clip isolado — não corta o conteúdo do calendário */}
-                <div className="absolute inset-0 rounded-[2rem] overflow-hidden pointer-events-none z-0">
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80"
-                    variants={overlayVariants}
-                    animate={overlayDataHora}
-                    initial="esquerda"
-                  >
-                    <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-2xl" />
-                    <div className="absolute -bottom-10 -left-6 w-40 h-40 rounded-full bg-white/5 blur-3xl" />
-                  </motion.div>
-                </div>
+                <RotateCcw size={15} />
+                Agendar Novo Horário
+              </button>
+              <a
+                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+                  `Consulta: ${servicoEscolhido?.nome} - ${profissional.nomeClinica}`
+                )}&dates=${format(dataSelecionada, "yyyyMMdd")}T${horarioSelecionado?.replace(":", "")}00Z/${format(
+                  dataSelecionada,
+                  "yyyyMMdd"
+                )}T${horarioSelecionado?.replace(":", "")}00Z&details=${encodeURIComponent(
+                  `Profissional: ${profissional.nomeClinica}\nServiço: ${servicoEscolhido?.nome}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2"
+              >
+                <CalendarIcon size={15} />
+                Salvar no Google Agenda
+              </a>
+            </div>
+          </motion.div>
+        ) : (
+          <>
+            {/* ── Stepper com Linha do Tempo ── */}
+            <div className="w-full max-w-2xl mx-auto mb-10 px-2">
+              <div className="relative flex items-center justify-between">
+                {/* Linha de Fundo */}
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-border/60 rounded-full -z-0" />
+                {/* Linha de Progresso Colorida Preenchida */}
+                <motion.div
+                  className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary rounded-full -z-0 transition-all duration-400"
+                  animate={{
+                    width:
+                      passoAtual === 1
+                        ? "0%"
+                        : passoAtual === 2
+                        ? "33.3%"
+                        : passoAtual === 3
+                        ? "66.6%"
+                        : "100%",
+                  }}
+                />
 
-                {/* Fundo branco do card (visível quando não está colorido) */}
-                <div className="absolute inset-0 bg-card rounded-[2rem] -z-10" />
+                {ETAPAS.map((etapa) => {
+                  const concluida = etapa.numero < passoAtual;
+                  const ativa = etapa.numero === passoAtual;
+                  const Icone = etapa.icone;
 
-                {/* Conteúdo do Card 2 */}
-                <div
-                  className={`relative z-10 p-6 md:p-8 flex flex-col h-full transition-opacity duration-500 ${
-                    servicoSelecionado ? "opacity-100" : "opacity-40 pointer-events-none"
-                  }`}
-                >
-                  <div className="mb-6 flex items-center justify-between">
-                    <motion.h2
-                      className="text-xl font-display font-bold"
-                      animate={{ color: servicoSelecionado ? "white" : "hsl(var(--foreground))" }}
-                      transition={{ duration: 0.4, delay: 0.1 }}
-                    >
-                      Data e Horário
-                    </motion.h2>
-                    <motion.span
-                      className="text-xs font-body font-semibold px-3 py-1 rounded-full"
-                      animate={{
-                        backgroundColor: servicoSelecionado ? "rgba(255,255,255,0.2)" : "hsl(var(--primary) / 0.1)",
-                        color: servicoSelecionado ? "white" : "hsl(var(--primary))",
-                      }}
-                      transition={{ duration: 0.4, delay: 0.1 }}
-                    >
-                      Passo 2 de 3
-                    </motion.span>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-8 lg:gap-12 flex-1">
-                    {/* Calendário */}
-                    <div className="md:w-1/2 flex flex-col">
-                      <div className="flex justify-between items-center mb-4 px-2">
-                        <motion.span
-                          className="font-body text-sm font-bold capitalize"
-                          animate={{ color: servicoSelecionado ? "white" : "hsl(var(--foreground))" }}
-                          transition={{ duration: 0.4, delay: 0.1 }}
-                        >
-                          {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
-                        </motion.span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={mesAnterior}
-                            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
-                              servicoSelecionado
-                                ? "bg-white/20 hover:bg-white/30 text-white"
-                                : "bg-secondary/50 hover:bg-secondary text-foreground"
-                            }`}
-                          >
-                            <ChevronLeft size={16} />
-                          </button>
-                          <button
-                            onClick={proximoMes}
-                            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
-                              servicoSelecionado
-                                ? "bg-white/20 hover:bg-white/30 text-white"
-                                : "bg-secondary/50 hover:bg-secondary text-foreground"
-                            }`}
-                          >
-                            <ChevronRight size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className={`rounded-2xl border p-4 flex-1 transition-colors duration-500 ${
-                        servicoSelecionado
-                          ? "bg-white/10 border-white/20"
-                          : "bg-background border-border"
-                      }`}>
-                        {renderizarDias(!!servicoSelecionado)}
-                        {renderizarCelulas(!!servicoSelecionado)}
-                      </div>
-                    </div>
-
-                    {/* Horários */}
+                  return (
                     <div
-                      className={`md:w-1/2 flex flex-col transition-opacity duration-300 ${
-                        dataSelecionada ? "opacity-100" : "opacity-30 pointer-events-none"
-                      }`}
+                      key={etapa.numero}
+                      className="flex flex-col items-center relative z-10 cursor-pointer"
+                      onClick={() => {
+                        // Permite navegar para trás clicando na bolinha
+                        if (concluida) setPassoAtual(etapa.numero as EtapaFluxo);
+                      }}
                     >
-                      <motion.span
-                        className="font-body text-sm font-bold mb-4 px-2"
-                        animate={{ color: servicoSelecionado ? "white" : "hsl(var(--foreground))" }}
-                        transition={{ duration: 0.4, delay: 0.1 }}
+                      <motion.div
+                        animate={{ scale: ativa ? 1.15 : 1 }}
+                        className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft ${
+                          concluida
+                            ? "bg-primary text-primary-foreground"
+                            : ativa
+                            ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
+                            : "bg-card text-muted-foreground border-2 border-border/70"
+                        }`}
                       >
-                        Horários para{" "}
-                        {format(dataSelecionada, "dd 'de' MMMM", { locale: ptBR })}
-                      </motion.span>
+                        {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
+                      </motion.div>
+                      <span
+                        className={`mt-2 font-body text-[11px] sm:text-xs font-bold transition-colors text-center hidden sm:block ${
+                          ativa
+                            ? "text-primary font-extrabold"
+                            : concluida
+                            ? "text-foreground font-semibold"
+                            : "text-muted-foreground font-medium"
+                        }`}
+                      >
+                        {etapa.numero}. {etapa.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                      {erroConflito && (
-                        <div className="mb-4 p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-white font-body text-xs font-semibold flex items-center justify-between gap-2 shadow-sm">
-                          <div className="flex items-center gap-2">
-                            <AlertCircle size={16} className="text-white shrink-0" />
-                            <span>{erroConflito}</span>
+            {/* ── Tipografia de Impacto da Etapa Atual ── */}
+            <div className="text-center mb-8 max-w-xl mx-auto space-y-2">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-primary tracking-tight">
+                {passoAtual === 1 && "Qual serviço você deseja agendar?"}
+                {passoAtual === 2 && "Escolha o melhor dia e horário"}
+                {passoAtual === 3 && "Como podemos te identificar?"}
+                {passoAtual === 4 && "Confirme seu agendamento"}
+              </h1>
+              <p className="text-xs sm:text-sm font-body text-muted-foreground font-medium">
+                {passoAtual === 1 && "Selecione um dos atendimentos disponíveis abaixo para continuar."}
+                {passoAtual === 2 && "Selecione uma data no calendário e clique no horário mais conveniente."}
+                {passoAtual === 3 && "Acesse sua conta ou informe seus dados para garantir a reserva."}
+                {passoAtual === 4 && "Revise todas as informações antes de oficializar sua consulta."}
+              </p>
+            </div>
+
+            {/* ── Conteúdo da Etapa Atual com AnimatePresence ── */}
+            <div className="flex-1">
+              <AnimatePresence mode="wait">
+                {/* ── ETAPA 1: SERVIÇOS ── */}
+                {passoAtual === 1 && (
+                  <motion.div
+                    key="passo-1"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 16 }}
+                    transition={{ duration: 0.25 }}
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                  >
+                    {profissional.servicos.map((servico) => {
+                      const selecionado = servicoEscolhido?.id === servico.id;
+
+                      return (
+                        <div
+                          key={servico.id}
+                          onClick={() => {
+                            setServicoEscolhido(servico);
+                            setPassoAtual(2); // Avança com 1 clique para máxima fluidez
+                          }}
+                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-4 shadow-soft hover:shadow-soft-lg hover:-translate-y-1 ${
+                            selecionado
+                              ? "bg-primary/10 border-primary ring-2 ring-primary/25"
+                              : "bg-background/80 border-border/60 hover:border-primary/50"
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="font-display font-bold text-foreground text-base leading-snug">
+                                {servico.nome}
+                              </h3>
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                                  selecionado
+                                    ? "bg-primary border-primary text-white"
+                                    : "border-border/80 text-transparent"
+                                }`}
+                              >
+                                <Check size={14} className="stroke-[3]" />
+                              </div>
+                            </div>
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/80 text-muted-foreground font-body text-xs font-semibold">
+                              <Clock size={12} className="text-primary" />
+                              <span>{servico.duracao}</span>
+                            </div>
                           </div>
+
+                          <div className="pt-3 border-t border-border/30 flex items-center justify-between">
+                            <span className="font-display font-extrabold text-foreground text-lg">
+                              {servico.preco}
+                            </span>
+                            <span className="font-body text-xs font-bold text-primary flex items-center gap-1">
+                              Selecionar <ArrowRight size={13} />
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </motion.div>
+                )}
+
+                {/* ── ETAPA 2: DATA E HORÁRIO ── */}
+                {passoAtual === 2 && (
+                  <motion.div
+                    key="passo-2"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 16 }}
+                    transition={{ duration: 0.25 }}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start"
+                  >
+                    {/* Coluna 1: Calendário Mensal */}
+                    <div className="md:col-span-6 bg-background/90 p-5 rounded-3xl border border-border/60 shadow-soft space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-border/30">
+                        <h3 className="font-display font-bold text-foreground text-base capitalize">
+                          {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
+                        </h3>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setErroConflito(null)}
-                            className="p-1 hover:bg-white/20 rounded-lg text-white"
+                            onClick={mesAnterior}
+                            className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            <X size={14} />
+                            <ChevronLeft size={18} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={proximoMes}
+                            className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <ChevronRight size={18} />
                           </button>
                         </div>
-                      )}
+                      </div>
 
-                      <div className="grid grid-cols-3 xl:grid-cols-4 gap-2.5 mb-6">
-                        {profissional.horariosDisponiveis.map((horario) => {
-                          const ocupado = horariosOcupados.includes(horario);
-                          const ativo = horarioSelecionado === horario;
-                          return (
-                            <button
-                              key={horario}
-                              disabled={ocupado}
-                              onClick={() => !ocupado && setHorarioSelecionado(horario)}
-                              title={ocupado ? `Horário ${horario} já reservado` : `Selecionar ${horario}`}
-                              className={`py-2.5 px-2 rounded-xl border font-body text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 ${
-                                ocupado
-                                  ? servicoSelecionado
-                                    ? "bg-black/20 border-white/10 text-white/40 cursor-not-allowed line-through"
-                                    : "bg-secondary/40 border-border/40 text-muted-foreground/35 cursor-not-allowed line-through"
-                                  : ativo
-                                  ? servicoSelecionado
-                                    ? "bg-white text-primary border-white shadow-md cursor-pointer"
-                                    : "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/30 cursor-pointer"
-                                  : servicoSelecionado
-                                  ? "bg-white/10 border-white/20 text-white hover:bg-white/20 cursor-pointer"
-                                  : "bg-background border-border text-foreground hover:border-primary/40 cursor-pointer"
-                              }`}
-                            >
-                              <span>{horario}</span>
-                              {ocupado && (
-                                <span className="text-[9px] font-semibold no-underline tracking-normal text-rose-300">
-                                  Reservado
+                      {/* Grade dos Dias */}
+                      <div>
+                        {/* Dias da semana cabeçalho */}
+                        <div className="grid grid-cols-7 text-center mb-2">
+                          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+                            <span key={i} className="font-body text-[10px] font-bold text-muted-foreground uppercase">
+                              {d}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Células das datas */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {(() => {
+                            const inicioMes = startOfMonth(mesAtual);
+                            const fimMes = endOfMonth(inicioMes);
+                            const inicio = startOfWeek(inicioMes, { locale: ptBR });
+                            const fim = endOfWeek(fimMes, { locale: ptBR });
+
+                            const dias: React.ReactNode[] = [];
+                            let d = inicio;
+
+                            while (d <= fim) {
+                              const diaLoop = d;
+                              const noMes = isSameMonth(diaLoop, mesAtual);
+                              const selecionado = isSameDay(diaLoop, dataSelecionada);
+                              const passado = isPast(diaLoop) && !isToday(diaLoop);
+
+                              dias.push(
+                                <button
+                                  key={diaLoop.toISOString()}
+                                  disabled={passado || !noMes}
+                                  onClick={() => {
+                                    setDataSelecionada(diaLoop);
+                                    setHorarioSelecionado(null);
+                                  }}
+                                  className={`h-10 rounded-xl font-body text-xs font-bold transition-all flex items-center justify-center relative cursor-pointer disabled:cursor-not-allowed ${
+                                    !noMes
+                                      ? "opacity-20 text-muted-foreground"
+                                      : passado
+                                      ? "opacity-30 line-through text-muted-foreground"
+                                      : selecionado
+                                      ? "bg-primary text-primary-foreground shadow-soft"
+                                      : "hover:bg-secondary text-foreground"
+                                  }`}
+                                >
+                                  <span>{format(diaLoop, "d")}</span>
+                                </button>
+                              );
+                              d = addDays(d, 1);
+                            }
+                            return dias;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Coluna 2: Horários do Dia Escolhido */}
+                    <div className="md:col-span-6 bg-background/90 p-5 rounded-3xl border border-border/60 shadow-soft space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-border/30">
+                        <div>
+                          <p className="text-[11px] font-body font-bold text-muted-foreground uppercase">
+                            Data selecionada:
+                          </p>
+                          <h3 className="font-display font-bold text-foreground text-sm capitalize">
+                            {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                          </h3>
+                        </div>
+                        <CalendarCheck size={18} className="text-primary" />
+                      </div>
+
+                      {slotsDoDia.bloqueado ? (
+                        <div className="py-12 text-center text-muted-foreground space-y-2">
+                          <AlertTriangle size={28} className="mx-auto text-amber-500 mb-1" />
+                          <p className="font-display font-bold text-sm text-foreground">
+                            Data sem atendimento
+                          </p>
+                          <p className="font-body text-xs">
+                            {slotsDoDia.motivo || "Escolha outro dia no calendário."}
+                          </p>
+                        </div>
+                      ) : carregandoHorarios ? (
+                        <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                          <Loader2 size={24} className="animate-spin text-primary" />
+                          <span className="font-body text-xs font-semibold">Buscando horários livres...</span>
+                        </div>
+                      ) : slotsDoDia.slots.length === 0 ? (
+                        <div className="py-12 text-center text-muted-foreground space-y-1">
+                          <p className="font-display font-bold text-sm text-foreground">
+                            Nenhum horário disponível
+                          </p>
+                          <p className="font-body text-xs">Todos os horários desta data já foram preenchidos.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                          {slotsDoDia.slots.map((slot) => {
+                            const ocupado = horariosOcupados.includes(slot);
+                            const ativo = horarioSelecionado === slot;
+
+                            return (
+                              <button
+                                key={slot}
+                                disabled={ocupado}
+                                onClick={() => setHorarioSelecionado(slot)}
+                                className={`py-3 px-2 rounded-xl text-xs font-body font-bold transition-all border flex flex-col items-center justify-center gap-0.5 cursor-pointer disabled:cursor-not-allowed ${
+                                  ocupado
+                                    ? "bg-secondary/40 border-border/30 text-muted-foreground/35 line-through opacity-50"
+                                    : ativo
+                                    ? "bg-primary text-primary-foreground border-primary shadow-soft"
+                                    : "bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-secondary/40"
+                                }`}
+                              >
+                                <span>{slot}</span>
+                                <span className="text-[9px] font-normal opacity-75">
+                                  {ocupado ? "Ocupado" : "Livre"}
                                 </span>
-                              )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ── ETAPA 3: IDENTIFICAÇÃO / AUTENTICAÇÃO ── */}
+                {passoAtual === 3 && (
+                  <motion.div
+                    key="passo-3"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 16 }}
+                    transition={{ duration: 0.25 }}
+                    className="max-w-md mx-auto w-full space-y-6"
+                  >
+                    {/* Se o paciente já está logado, exibe o crachá de reconhecimento */}
+                    {clienteLogado ? (
+                      <div className="p-6 rounded-3xl bg-background border border-border shadow-soft text-center space-y-4">
+                        <div className="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center font-display font-extrabold text-2xl shadow-inner">
+                          {clienteLogado.nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-body uppercase font-bold text-muted-foreground tracking-wider">
+                            Paciente Reconhecido
+                          </span>
+                          <h3 className="font-display font-extrabold text-xl text-foreground">
+                            {clienteLogado.nome}
+                          </h3>
+                          <p className="font-body text-xs text-muted-foreground mt-0.5">
+                            {clienteLogado.telefone ? mascararTelefone(clienteLogado.telefone) : clienteLogado.email}
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-border/30 flex items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await signOut();
+                              setClienteLogado(null);
+                            }}
+                            className="text-xs font-body font-bold text-muted-foreground hover:text-rose-500 transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <LogOut size={13} />
+                            Trocar de Conta
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPassoAtual(4)}
+                            className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all cursor-pointer"
+                          >
+                            Continuar com esta conta
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Formulário com Abas: Login ou Cadastro */
+                      <div className="bg-background p-6 rounded-3xl border border-border shadow-soft space-y-5">
+                        {/* Toggle de Abas */}
+                        <div className="grid grid-cols-2 p-1 bg-secondary/60 rounded-xl border border-border/40 text-xs font-body font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setAbaAuth("cadastro")}
+                            className={`py-2 rounded-lg transition-all cursor-pointer ${
+                              abaAuth === "cadastro"
+                                ? "bg-card text-foreground shadow-xs"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Criar Conta
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAbaAuth("login")}
+                            className={`py-2 rounded-lg transition-all cursor-pointer ${
+                              abaAuth === "login"
+                                ? "bg-card text-foreground shadow-xs"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Já tenho conta
+                          </button>
+                        </div>
+
+                        {abaAuth === "login" ? (
+                          /* Formulário de Login */
+                          <form onSubmit={handleLoginInline} className="space-y-4">
+                            <div className="space-y-1.5">
+                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                E-mail
+                              </label>
+                              <div className="relative">
+                                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                <input
+                                  type="email"
+                                  required
+                                  value={loginEmail}
+                                  onChange={(e) => setLoginEmail(e.target.value)}
+                                  placeholder="seu@email.com"
+                                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                Senha
+                              </label>
+                              <div className="relative">
+                                <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                <input
+                                  type="password"
+                                  required
+                                  value={loginSenha}
+                                  onChange={(e) => setLoginSenha(e.target.value)}
+                                  placeholder="Sua senha secreta"
+                                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={salvando}
+                              className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                              {salvando ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                              Entrar e Continuar
                             </button>
-                          );
-                        })}
+                          </form>
+                        ) : (
+                          /* Formulário de Cadastro */
+                          <form onSubmit={handleCadastroInline} className="space-y-3.5">
+                            <div className="space-y-1">
+                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                Nome Completo
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={cadNome}
+                                onChange={(e) => setCadNome(e.target.value)}
+                                placeholder="Seu nome completo"
+                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div className="space-y-1">
+                                <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                  WhatsApp
+                                </label>
+                                <input
+                                  type="tel"
+                                  required
+                                  value={cadWhatsapp}
+                                  onChange={(e) => setCadWhatsapp(mascararTelefone(e.target.value))}
+                                  placeholder="(11) 99999-9999"
+                                  className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                  CPF
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={cadCpf}
+                                  onChange={(e) => setCadCpf(mascararCPF(e.target.value))}
+                                  placeholder="000.000.000-00"
+                                  className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                E-mail
+                              </label>
+                              <input
+                                type="email"
+                                required
+                                value={cadEmail}
+                                onChange={(e) => setCadEmail(e.target.value)}
+                                placeholder="seu@email.com"
+                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                                Criar Senha
+                              </label>
+                              <input
+                                type="password"
+                                required
+                                minLength={6}
+                                value={cadSenha}
+                                onChange={(e) => setCadSenha(e.target.value)}
+                                placeholder="Mínimo 6 caracteres"
+                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                              />
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={salvando}
+                              className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                            >
+                              {salvando ? <Loader2 size={16} className="animate-spin" /> : <UserCheck size={16} />}
+                              Cadastrar e Continuar
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* ── ETAPA 4: CONFIRMAÇÃO & RECIBO ── */}
+                {passoAtual === 4 && (
+                  <motion.div
+                    key="passo-4"
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 16 }}
+                    transition={{ duration: 0.25 }}
+                    className="max-w-lg mx-auto w-full space-y-6"
+                  >
+                    {/* Card Recibo em Destaque */}
+                    <div className="p-6 rounded-3xl bg-background border border-border/80 shadow-soft space-y-5">
+                      <div className="flex items-center justify-between border-b border-border/30 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <Receipt size={18} className="text-primary" />
+                          <h3 className="font-display font-bold text-foreground text-base">
+                            Recibo do Agendamento
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-body font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 border border-amber-500/30 uppercase">
+                          Pendente de Confirmação
+                        </span>
+                      </div>
+
+                      <div className="space-y-3.5 text-xs font-body">
+                        <div className="flex items-center justify-between py-1 border-b border-border/20">
+                          <span className="text-muted-foreground font-bold">Serviço:</span>
+                          <span className="font-display font-bold text-foreground text-sm">
+                            {servicoEscolhido?.nome}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-1 border-b border-border/20">
+                          <span className="text-muted-foreground font-bold">Valor & Duração:</span>
+                          <span className="font-bold text-foreground">
+                            {servicoEscolhido?.preco} • {servicoEscolhido?.duracao}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-1 border-b border-border/20">
+                          <span className="text-muted-foreground font-bold">Data & Horário:</span>
+                          <span className="font-bold text-primary capitalize">
+                            {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-1 border-b border-border/20">
+                          <span className="text-muted-foreground font-bold">Paciente:</span>
+                          <span className="font-bold text-foreground">{clienteLogado?.nome}</span>
+                        </div>
+
+                        {clienteLogado?.telefone && (
+                          <div className="flex items-center justify-between py-1 border-b border-border/20">
+                            <span className="text-muted-foreground font-bold">WhatsApp:</span>
+                            <span className="font-bold text-foreground">
+                              {mascararTelefone(clienteLogado.telefone)}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-muted-foreground font-bold">Local / Clínica:</span>
+                          <span className="font-bold text-foreground">{profissional.nomeClinica}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/15 text-[11px] font-body text-muted-foreground">
+                        <p className="leading-relaxed">
+                          Ao confirmar, sua solicitação será enviada diretamente à agenda do profissional.
+                          Você receberá a confirmação por WhatsApp.
+                        </p>
                       </div>
 
                       <button
-                        onClick={handleContinuar}
-                        disabled={!servicoSelecionado || !dataSelecionada || !horarioSelecionado}
-                        className={`mt-auto w-full py-4 rounded-2xl font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none ${
-                          servicoSelecionado
-                            ? "bg-white text-primary hover:bg-white/90"
-                            : "bg-primary text-primary-foreground"
-                        }`}
+                        type="button"
+                        disabled={salvando}
+                        onClick={handleConfirmarAgendamento}
+                        className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                       >
-                        Continuar para Confirmação
-                        <ChevronRight size={18} />
+                        {salvando ? (
+                          <>
+                            <Loader2 size={18} className="animate-spin" />
+                            Finalizando Agendamento...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={18} />
+                            Confirmar Agendamento Agora
+                          </>
+                        )}
                       </button>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Etapa 2: Formulário de Confirmação ── */}
-          {etapa === "formulario" && !enviado && (
-            <motion.div
-              key="formulario"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex-1 flex items-center justify-center"
-            >
-              <div className="w-full max-w-2xl bg-card rounded-[2rem] shadow-floating border border-border/50 p-8 md:p-12 relative">
-                <button
-                  onClick={() => setEtapa("selecao")}
-                  className="absolute top-8 left-8 flex items-center gap-2 w-10 h-10 justify-center rounded-full bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft size={18} />
-                </button>
-
-                <div className="text-center mt-10 mb-8">
-                  <h2 className="text-3xl font-display font-extrabold text-foreground mb-4">
-                    Confirme seu agendamento
-                  </h2>
-                  <div className="inline-flex flex-col md:flex-row bg-primary/5 border border-primary/10 rounded-2xl p-4 gap-4 items-center justify-center text-left mx-auto">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
-                      <CheckCircle2 size={24} />
-                    </div>
-                    <div>
-                      <p className="font-body text-base font-bold text-foreground leading-tight">
-                        {servicoEscolhido?.nome}
-                      </p>
-                      <p className="font-body text-sm text-primary font-semibold mt-1 capitalize">
-                        {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 🛡️ Card / Badge Suave: Reconhecimento Automático do Paciente */}
-                {clienteLogado && (
-                  <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl bg-secondary/50 border border-border/70 shadow-soft flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-base shrink-0">
-                        {clienteLogado.nome ? clienteLogado.nome.charAt(0).toUpperCase() : <User size={18} />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-body uppercase font-bold tracking-wider text-muted-foreground">
-                          Agendando como
-                        </p>
-                        <p className="font-display font-bold text-foreground text-sm truncate">
-                          {clienteLogado.nome}
-                        </p>
-                        {clienteLogado.telefone && (
-                          <p className="font-body text-xs text-muted-foreground truncate">
-                            {mascararTelefone(clienteLogado.telefone)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await signOut();
-                        setClienteLogado(null);
-                        setNome("");
-                        setWhatsapp("");
-                        setEtapa("selecao");
-                      }}
-                      title="Sair / Trocar conta"
-                      className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors px-3 py-1.5 rounded-xl hover:bg-destructive/10 shrink-0 flex items-center gap-1.5 cursor-pointer border border-border/50 hover:border-destructive/30"
-                    >
-                      <LogOut size={13} />
-                      <span>Sair / Trocar conta</span>
-                    </button>
-                  </div>
+                  </motion.div>
                 )}
+              </AnimatePresence>
+            </div>
 
-                <form onSubmit={handleEnviar} className="space-y-5 max-w-md mx-auto">
-                  {/* Se NÃO houver clienteLogado reconhecido, pede os dados como fallback */}
-                  {!clienteLogado && (
-                    <>
-                      <div className="space-y-1.5">
-                        <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                          Nome Completo
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={nome}
-                          onChange={(e) => setNome(e.target.value)}
-                          placeholder="Seu nome completo"
-                          className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                          WhatsApp
-                        </label>
-                        <input
-                          type="tel"
-                          required
-                          value={whatsapp}
-                          onChange={(e) => setWhatsapp(mascararTelefone(e.target.value))}
-                          placeholder="(11) 99999-9999"
-                          maxLength={15}
-                          inputMode="numeric"
-                          className="w-full p-4 rounded-xl bg-background border border-border font-body text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={salvando}
-                    className={`w-full bg-primary text-primary-foreground py-4 rounded-xl font-body font-bold text-base shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer ${
-                      salvando ? "opacity-70 cursor-not-allowed transform-none" : ""
-                    }`}
-                  >
-                    {salvando ? "Confirmando Agendamento..." : "Confirmar Agendamento"}
-                  </button>
-                  <p className="text-center font-body text-[11px] font-medium text-muted-foreground mt-4">
-                    Ao confirmar, você concorda com nossos termos de uso e política de privacidade.
-                  </p>
-                </form>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Etapa 3: Sucesso ── */}
-          {enviado && (
-            <motion.div
-              key="sucesso"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
-              className="flex-1 flex items-center justify-center"
-            >
-              <div className="text-center max-w-md">
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                  <Star className="text-primary" size={40} />
-                </div>
-                <h2 className="text-3xl font-display font-extrabold text-foreground mb-3">
-                  Agendamento Confirmado!
-                </h2>
-                <p className="font-body text-muted-foreground mb-2">
-                  <span className="font-bold text-foreground">{servicoEscolhido?.nome}</span>
-                </p>
-                <p className="font-body text-primary font-semibold capitalize mb-8">
-                  {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
-                </p>
-                <p className="font-body text-sm text-muted-foreground">
-                  Em breve você receberá uma confirmação no WhatsApp <strong>{whatsapp}</strong>.
-                </p>
+            {/* ── Barra de Navegação Inferior (Voltar / Avançar) ── */}
+            <div className="pt-8 mt-8 border-t border-border/30 flex items-center justify-between gap-4">
+              {passoAtual > 1 ? (
                 <button
-                  onClick={() => {
-                    setEtapa("selecao");
-                    setEnviado(false);
-                    setServicoSelecionado(null);
-                    setHorarioSelecionado(null);
-                    setNome("");
-                    setWhatsapp("");
-                  }}
-                  className="mt-8 px-8 py-3 rounded-full bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all"
+                  type="button"
+                  onClick={() => setPassoAtual((prev) => (prev - 1) as EtapaFluxo)}
+                  className="px-5 py-2.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  Fazer outro agendamento
+                  <ArrowLeft size={15} />
+                  Voltar
                 </button>
-              </div>
-            </motion.div>
-          )}
+              ) : (
+                <div />
+              )}
 
-        </AnimatePresence>
-
-        {/* 🛡️ Modal de Autenticação / Cadastro de Pacientes */}
-        <ModalAuthPaciente
-          aberto={modalAuthAberto}
-          onFechar={() => setModalAuthAberto(false)}
-          empresaId={profissional.id}
-          nomeClinica={profissional.nomeClinica}
-          onSucesso={handleAuthSucesso}
-        />
-
-        {/* ── Toast de Alerta Visual (Trigger de Limite / Erros) ── */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -25, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.96 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className={`fixed top-6 right-4 sm:right-8 z-50 max-w-md w-[calc(100%-2rem)] p-4 rounded-2xl shadow-floating border backdrop-blur-md flex items-start gap-3.5 ${
-                toast.tipo === "warning"
-                  ? "bg-amber-50/95 border-amber-300/80 text-amber-950 shadow-amber-500/10"
-                  : toast.tipo === "error"
-                  ? "bg-rose-50/95 border-rose-300/80 text-rose-950 shadow-rose-500/10"
-                  : "bg-card/95 border-border/80 text-foreground"
-              }`}
-            >
-              <div
-                className={`p-2 rounded-xl shrink-0 ${
-                  toast.tipo === "warning"
-                    ? "bg-amber-500/20 text-amber-700"
-                    : toast.tipo === "error"
-                    ? "bg-rose-500/20 text-rose-700"
-                    : "bg-primary/20 text-primary"
-                }`}
-              >
-                {toast.tipo === "warning" ? (
-                  <AlertTriangle size={20} className="stroke-[2.2]" />
-                ) : (
-                  <AlertCircle size={20} className="stroke-[2.2]" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0 pt-0.5">
-                <h4
-                  className={`font-display font-bold text-xs uppercase tracking-wider mb-1 ${
-                    toast.tipo === "warning"
-                      ? "text-amber-800"
-                      : toast.tipo === "error"
-                      ? "text-rose-800"
-                      : "text-primary"
-                  }`}
+              {passoAtual === 1 && (
+                <button
+                  type="button"
+                  disabled={!servicoEscolhido}
+                  onClick={() => setPassoAtual(2)}
+                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {toast.tipo === "warning" ? "Aviso de Limite de Consultas" : "Aviso do Sistema"}
-                </h4>
-                <p className="font-body text-xs sm:text-sm leading-relaxed font-medium">
-                  {toast.mensagem}
-                </p>
-              </div>
+                  Avançar para Data e Hora
+                  <ArrowRight size={15} />
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => setToast(null)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-lg transition-colors cursor-pointer shrink-0"
-                title="Fechar aviso"
-              >
-                <X size={16} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {passoAtual === 2 && (
+                <button
+                  type="button"
+                  disabled={!horarioSelecionado}
+                  onClick={() => setPassoAtual(3)}
+                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Avançar para Identificação
+                  <ArrowRight size={15} />
+                </button>
+              )}
+
+              {passoAtual === 3 && clienteLogado && (
+                <button
+                  type="button"
+                  onClick={() => setPassoAtual(4)}
+                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  Avançar para Resumo
+                  <ArrowRight size={15} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
