@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
+import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
 import { ModalNovoAgendamento } from "../../components/ModalNovoAgendamento";
@@ -1038,7 +1039,10 @@ interface ConfigurarDisponibilidadeProps {
 }
 
 function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) {
-  const [horarios, setHorarios] = useState<Record<DiaSemana, HorarioDia>>({
+  const { profissional, refetch } = useProfessional();
+  const { user } = useAuth();
+
+  const horariosPadrao: Record<DiaSemana, HorarioDia> = {
     seg: { ativo: true, inicio: "08:00", fim: "18:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
     ter: { ativo: true, inicio: "08:00", fim: "18:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
     qua: { ativo: true, inicio: "08:00", fim: "17:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
@@ -1046,12 +1050,45 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
     sex: { ativo: true, inicio: "08:00", fim: "17:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
     sab: { ativo: false, inicio: "09:00", fim: "13:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
     dom: { ativo: false, inicio: "09:00", fim: "12:00", temIntervalo: false, intervaloInicio: "12:00", intervaloFim: "13:00" },
+  };
+
+  const [horarios, setHorarios] = useState<Record<DiaSemana, HorarioDia>>(() => {
+    if (profissional?.disponibilidade?.horarios) {
+      return profissional.disponibilidade.horarios;
+    }
+    try {
+      const cache = localStorage.getItem(`disponibilidade_${profissional?.id}`);
+      if (cache) {
+        const p = JSON.parse(cache);
+        if (p.horarios) return p.horarios;
+      }
+    } catch (e) {}
+    return horariosPadrao;
   });
 
-  const [bloqueios, setBloqueios] = useState<Bloqueio[]>([
-    { id: "b1", data: format(addDays(new Date(), 5), "yyyy-MM-dd"), motivo: "Feriado Municipal" },
-    { id: "b2", data: format(addDays(new Date(), 12), "yyyy-MM-dd"), motivo: "Congresso de Fisioterapia" },
-  ]);
+  const [bloqueios, setBloqueios] = useState<Bloqueio[]>(() => {
+    if (profissional?.disponibilidade?.bloqueios) {
+      return profissional.disponibilidade.bloqueios;
+    }
+    try {
+      const cache = localStorage.getItem(`disponibilidade_${profissional?.id}`);
+      if (cache) {
+        const p = JSON.parse(cache);
+        if (p.bloqueios) return p.bloqueios;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  // Sincroniza se a store carregar ou atualizar posteriormente
+  useEffect(() => {
+    if (profissional?.disponibilidade?.horarios) {
+      setHorarios(profissional.disponibilidade.horarios);
+    }
+    if (profissional?.disponibilidade?.bloqueios) {
+      setBloqueios(profissional.disponibilidade.bloqueios);
+    }
+  }, [profissional?.disponibilidade]);
 
   const [novoBloqueioData, setNovoBloqueioData] = useState("");
   const [novoBloqueioMotivo, setNovoBloqueioMotivo] = useState("");
@@ -1121,16 +1158,50 @@ function ConfigurarDisponibilidade({ onSalvo }: ConfigurarDisponibilidadeProps) 
   };
 
   const salvar = async () => {
+    if (!profissional?.id) return;
     setSalvando(true);
-    // Futuramente: chamar API do Supabase aqui
-    await new Promise((res) => setTimeout(res, 800));
-    setSalvando(false);
-    setSalvo(true);
-    // Dá um breve feedback visual do ícone de sucesso e redireciona de volta para a agenda
-    setTimeout(() => {
-      setSalvo(false);
-      onSalvo?.();
-    }, 600);
+
+    const payload = {
+      horarios,
+      bloqueios,
+    };
+
+    // 1. Salva em cache local imediatamente para persistência garantida
+    try {
+      localStorage.setItem(`disponibilidade_${profissional.id}`, JSON.stringify(payload));
+    } catch (e) {
+      console.warn("Erro ao salvar no localStorage:", e);
+    }
+
+    // 2. Salva no banco Supabase na tabela empresas
+    try {
+      let query = supabase
+        .from("empresas")
+        .update({
+          disponibilidade: payload,
+        })
+        .eq("id", profissional.id);
+
+      if (user?.id) {
+        query = query.or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
+      }
+
+      const { error } = await query;
+      if (error) {
+        console.warn("[AgendaProfissional] Aviso ao salvar no banco:", error.message);
+      } else {
+        refetch();
+      }
+    } catch (err) {
+      console.error("[AgendaProfissional] Erro inesperado ao salvar disponibilidade:", err);
+    } finally {
+      setSalvando(false);
+      setSalvo(true);
+      setTimeout(() => {
+        setSalvo(false);
+        onSalvo?.();
+      }, 600);
+    }
   };
 
   return (

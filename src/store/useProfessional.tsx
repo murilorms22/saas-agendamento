@@ -53,6 +53,7 @@ export interface ProfessionalData {
   corPrimaria: CorPrimaria;
   corPrimariaHex: string;
   logoUrl?: string;
+  disponibilidade?: any;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,6 +143,41 @@ function formatarPreco(valor: any): string {
 // Mapeadores: Row do banco → tipos do componente
 // ─────────────────────────────────────────────────────────────────────────────
 
+function calcularHorariosDisponiveis(disponibilidade: any): string[] {
+  if (!disponibilidade?.horarios) {
+    return ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+  }
+
+  const setHorarios = new Set<string>();
+  const dias = Object.values(disponibilidade.horarios) as any[];
+
+  dias.forEach((d) => {
+    if (!d.ativo || !d.inicio || !d.fim) return;
+    const [hIni] = d.inicio.split(":").map(Number);
+    const [hFim] = d.fim.split(":").map(Number);
+
+    let hIntIni = -1;
+    let hIntFim = -1;
+    if (d.temIntervalo && d.intervaloInicio && d.intervaloFim) {
+      hIntIni = Number(d.intervaloInicio.split(":")[0]);
+      hIntFim = Number(d.intervaloFim.split(":")[0]);
+    }
+
+    for (let h = hIni; h < hFim; h++) {
+      // Se cair no intervalo do profissional, NÃO inclui!
+      if (d.temIntervalo && h >= hIntIni && h < hIntFim) {
+        continue;
+      }
+      setHorarios.add(`${String(h).padStart(2, "0")}:00`);
+    }
+  });
+
+  const ordenados = Array.from(setHorarios).sort();
+  return ordenados.length > 0
+    ? ordenados
+    : ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+}
+
 function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
   const stats: ProfessionalData["stats"] = [];
   if (row.stat_valor_1 && row.stat_rotulo_1) {
@@ -154,6 +190,14 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
     stats.push({ valor: "5.0", rotulo: "Avaliação" });
   }
 
+  let disp = row.disponibilidade ?? null;
+  if (!disp && typeof window !== "undefined") {
+    try {
+      const cache = localStorage.getItem(`disponibilidade_${row.id}`);
+      if (cache) disp = JSON.parse(cache);
+    } catch (e) {}
+  }
+
   return {
     id: String(row.id),
     nomeClinica: row.nome_negocio ?? row.nome ?? "Minha Clínica",
@@ -162,12 +206,11 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
     descricao: row.descricao ?? "Atendimento personalizado com hora marcada.",
     stats,
     servicos,
-    horariosDisponiveis: row.horarios_disponiveis ?? [
-      "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
-    ],
+    horariosDisponiveis: calcularHorariosDisponiveis(disp),
     corPrimaria: hexParaHsl(row.cor_primaria ?? "#0d9488"),
     corPrimariaHex: row.cor_primaria ?? "#0d9488",
     logoUrl: row.logo_url ?? "",
+    disponibilidade: disp,
   };
 }
 
