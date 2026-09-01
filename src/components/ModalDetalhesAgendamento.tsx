@@ -61,6 +61,11 @@ export function ModalDetalhesAgendamento({
       cor: "bg-amber-500/15 text-amber-600 border border-amber-500/30",
       label: "Pendente",
     },
+    Finalizado: {
+      icone: <CheckCircle2 size={15} />,
+      cor: "bg-blue-500/15 text-blue-600 border border-blue-500/30",
+      label: "Finalizado",
+    },
     Cancelado: {
       icone: <X size={15} />,
       cor: "bg-rose-500/15 text-rose-600 border border-rose-500/30",

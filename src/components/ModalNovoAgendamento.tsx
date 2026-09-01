@@ -4,7 +4,7 @@ import { X, Search, Phone, UserCheck, Pencil, AlertCircle, Lock } from "lucide-r
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
 
-export type StatusAgendamento = "Pendente" | "Confirmado" | "Cancelado";
+export type StatusAgendamento = "Pendente" | "Confirmado" | "Finalizado" | "Cancelado";
 
 export interface AgendamentoItem {
   id: string;

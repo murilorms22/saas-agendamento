@@ -53,7 +53,7 @@ import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendame
 // Tipos
 // ──────────────────────────────────────────────────────────────
 
-type StatusAgendamento = "Pendente" | "Confirmado" | "Cancelado";
+type StatusAgendamento = "Pendente" | "Confirmado" | "Finalizado" | "Cancelado";
 
 interface AgendamentoSemana {
   id: string;
@@ -161,7 +161,7 @@ function mapearAgendamentoSemana(
     nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
     telefone: row.whatsapp_cliente ?? row.cliente_telefone ?? row.telefone ?? row.whatsapp ?? "",
     servico: servicoNome,
-    status: (row.status === "Confirmado" || row.status === "Cancelado"
+    status: (row.status === "Confirmado" || row.status === "Finalizado" || row.status === "Cancelado"
       ? row.status
       : "Pendente") as StatusAgendamento,
   };
@@ -174,7 +174,8 @@ function mapearAgendamentoSemana(
 function BadgeStatus({ status }: { status: StatusAgendamento }) {
   const estilos: Record<StatusAgendamento, { cor: string; icone: React.ReactNode; tooltip: string }> = {
     Pendente: { cor: "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30", icone: <Clock size={12} />, tooltip: "Pendente" },
-    Confirmado: { cor: "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Confirmado" },
+    Confirmado: { cor: "bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Confirmado" },
+    Finalizado: { cor: "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Finalizado" },
     Cancelado: { cor: "bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30", icone: <X size={12} />, tooltip: "Cancelado" },
   };
   const { cor, icone, tooltip } = estilos[status] ?? estilos.Pendente;
@@ -200,8 +201,9 @@ function CardAgendamento({
   onVerDetalhes: (ag: AgendamentoSemana) => void;
 }) {
   const fundos: Record<StatusAgendamento, string> = {
-    Confirmado: "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-500/50",
+    Confirmado: "bg-blue-500/10 border-blue-500/20 hover:border-blue-500/50",
     Pendente: "bg-primary/10 border-primary/20 hover:border-primary/50",
+    Finalizado: "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-500/50",
     Cancelado: "bg-rose-500/5 border-rose-500/10 opacity-50",
   };
 
