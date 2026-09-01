@@ -179,7 +179,7 @@ export function ModalAuthPaciente({
         } else if (authError.message.includes("Email not confirmed")) {
           setMensagemErro("Por favor, confirme seu e-mail antes de acessar.");
         } else {
-          setMensagemErro(authError.message || "Erro ao efetuar login.");
+          setMensagemErro("Não foi possível realizar login. Verifique suas credenciais.");
         }
         setCarregando(false);
         return;
@@ -320,9 +320,9 @@ export function ModalAuthPaciente({
         if (authError.message.includes("User already registered")) {
           setMensagemErro("Este e-mail já possui cadastro. Clique na aba 'Entrar' para acessar.");
         } else if (authError.message.toLowerCase().includes("rate limit")) {
-          setMensagemErro("Muitas tentativas de cadastro recentes (limite de envio de e-mails atingido). Aguarde alguns instantes ou desative a confirmação de e-mail no painel do Supabase.");
+          setMensagemErro("Muitas tentativas de cadastro recentes. Aguarde alguns instantes antes de tentar novamente.");
         } else {
-          setMensagemErro(authError.message || "Erro ao cadastrar conta.");
+          setMensagemErro("Não foi possível concluir o cadastro. Verifique os dados informados.");
         }
         setCarregando(false);
         return;

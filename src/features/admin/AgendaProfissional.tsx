@@ -1669,18 +1669,20 @@ function AgendaConteudo() {
 
   // Busca agendamentos reais do Supabase e escuta alterações em tempo real
   useEffect(() => {
-    async function carregar() {
-      if (!profissional?.id) return;
+    if (!profissional?.id) return;
+    const profId = profissional.id;
+    const profServicos = profissional.servicos;
 
+    async function carregar() {
       try {
         const { data, error } = await supabase
           .from("agendamentos")
           .select("*")
-          .eq("empresa_id", profissional.id);
+          .eq("empresa_id", profId);
 
         if (!error && data) {
           const mapeados = data.map((r: any) =>
-            mapearAgendamentoSemana(r, profissional.servicos)
+            mapearAgendamentoSemana(r, profServicos)
           );
           setAgendamentos(mapeados);
         }
@@ -1697,12 +1699,17 @@ function AgendaConteudo() {
     };
     window.addEventListener("focus", handleFocus);
 
-    // 2. Sincronização em tempo real via Supabase Realtime
+    // 2. Sincronização em tempo real via Supabase Realtime (escopo estrito da empresa)
     const channel = supabase
-      .channel("agenda-mudancas-realtime")
+      .channel(`agenda-mudancas-realtime-${profId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "agendamentos" },
+        {
+          event: "*",
+          schema: "public",
+          table: "agendamentos",
+          filter: `empresa_id=eq.${profId}`,
+        },
         () => {
           carregar();
         }

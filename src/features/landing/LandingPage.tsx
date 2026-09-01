@@ -486,7 +486,7 @@ function FluxoAgendamentoConteudo() {
         if (authError.message.includes("Invalid login credentials")) {
           exibirToast("E-mail ou senha incorretos.", "error");
         } else {
-          exibirToast(`Falha no login: ${authError.message}`, "error");
+          exibirToast("Não foi possível realizar login. Verifique suas credenciais.", "error");
         }
         setSalvando(false);
         return;
@@ -565,7 +565,7 @@ function FluxoAgendamentoConteudo() {
         } else if (authError.message.toLowerCase().includes("rate limit")) {
           exibirToast("Muitas tentativas recentes. Aguarde instantes antes de tentar novamente.", "warning");
         } else {
-          exibirToast(`Erro no cadastro: ${authError.message}`, "error");
+          exibirToast("Não foi possível concluir o cadastro. Verifique os dados informados.", "error");
         }
         setSalvando(false);
         return;
@@ -739,8 +739,22 @@ function FluxoAgendamentoConteudo() {
             "Você já possui 3 agendamentos ativos. Aguarde a finalização de uma consulta para agendar novamente.",
             "warning"
           );
+        } else if (
+          /unique constraint|duplicate key|idx_agendamentos_concorrencia|23505/i.test(
+            textoErro
+          )
+        ) {
+          // 🛡️ Trava Atômica do PostgreSQL contra Concorrência / Race Condition
+          exibirToast(
+            "Ops! Este horário acabou de ser reservado por outro cliente. Por favor, escolha outro horário disponível.",
+            "warning"
+          );
+          setHorariosOcupados((prev) => [...prev, horarioSelecionado]);
+          setHorarioSelecionado(null);
+          salvarNoSession(STORAGE_KEYS.HORARIO, null);
+          navegarParaPasso(2);
         } else {
-          exibirToast(`Falha ao registrar agendamento: ${insertError.message}`, "error");
+          exibirToast("Não foi possível registrar seu agendamento. Tente novamente.", "error");
         }
         setSalvando(false);
         return;

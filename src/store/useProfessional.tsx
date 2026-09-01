@@ -329,29 +329,6 @@ export function ProfessionalProvider({
 
           empresaData = data;
 
-          // Se a clínica inicial de desenvolvimento ainda não tiver user_id vinculado, vincula automaticamente
-          if (!empresaData) {
-            const { data: clinicaDesvinculada } = await supabase
-              .from("empresas")
-              .select("*")
-              .is("user_id", null)
-              .limit(1)
-              .maybeSingle();
-
-            if (clinicaDesvinculada) {
-              await supabase
-                .from("empresas")
-                .update({ user_id: user.id, auth_user_id: user.id })
-                .eq("id", clinicaDesvinculada.id);
-
-              empresaData = {
-                ...clinicaDesvinculada,
-                user_id: user.id,
-                auth_user_id: user.id,
-              };
-            }
-          }
-
           // Se nenhuma clínica foi encontrada para este usuário autenticado:
           // Força signOut() e redireciona imediatamente para o login com erro claro
           if (!empresaData) {

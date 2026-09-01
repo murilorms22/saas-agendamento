@@ -94,8 +94,10 @@ function PainelInicialConteudo() {
 
   // Carrega agendamentos e clientes do Supabase
   useEffect(() => {
+    if (!profissional?.id) return;
+    const profId = profissional.id;
+
     async function carregarDados() {
-      if (!profissional?.id) return;
       const hojeStr = format(new Date(), "yyyy-MM-dd");
 
       try {
@@ -103,7 +105,7 @@ function PainelInicialConteudo() {
         const { data: ags } = await supabase
           .from("agendamentos")
           .select("*")
-          .eq("empresa_id", profissional.id)
+          .eq("empresa_id", profId)
           .order("horario", { ascending: true });
 
         if (ags) {
@@ -120,7 +122,7 @@ function PainelInicialConteudo() {
         const { count } = await supabase
           .from("clientes")
           .select("*", { count: "exact", head: true })
-          .eq("empresa_id", profissional.id);
+          .eq("empresa_id", profId);
 
         if (count !== null) {
           setTotalClientes(count);
@@ -138,12 +140,17 @@ function PainelInicialConteudo() {
     };
     window.addEventListener("focus", handleFocus);
 
-    // 2. Sincronização em tempo real via Supabase Realtime
+    // 2. Sincronização em tempo real via Supabase Realtime (escopo estrito da empresa)
     const channel = supabase
-      .channel("painel-mudancas-realtime")
+      .channel(`painel-mudancas-realtime-${profId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "agendamentos" },
+        {
+          event: "*",
+          schema: "public",
+          table: "agendamentos",
+          filter: `empresa_id=eq.${profId}`,
+        },
         () => {
           carregarDados();
         }

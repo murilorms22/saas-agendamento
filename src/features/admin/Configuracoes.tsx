@@ -150,7 +150,7 @@ function ConfiguracoesConteudo() {
             "warning"
           );
         } else {
-          exibirToast(`Erro no envio da imagem: ${uploadError.message}`, "error");
+          exibirToast("Não foi possível enviar a imagem. Tente novamente.", "error");
         }
         return;
       }
@@ -190,6 +190,13 @@ function ConfiguracoesConteudo() {
       return;
     }
 
+    // Validação de segurança na URL da Logo (HTTPS estrito)
+    const logoUrlLimpa = logoUrl.trim();
+    if (logoUrlLimpa && !/^https:\/\//i.test(logoUrlLimpa)) {
+      exibirToast("A URL da logo deve começar com https:// para ser segura.", "error");
+      return;
+    }
+
     setSalvando(true);
     try {
       // 🛡️ Trava dupla estrita exigida pelo Red Team: .eq('id', profissional.id).eq('user_id', user.id)
@@ -197,7 +204,7 @@ function ConfiguracoesConteudo() {
         .from("empresas")
         .update({
           cor_primaria: hexNormalizado,
-          logo_url: logoUrl.trim() || null,
+          logo_url: logoUrlLimpa || null,
           nome_negocio: nomeNegocio.trim() || profissional.nomeClinica,
           especialidade: especialidade.trim() || profissional.profissao,
         })
@@ -220,7 +227,8 @@ function ConfiguracoesConteudo() {
             .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
 
           if (fallbackError) {
-            exibirToast(`Erro ao atualizar: ${fallbackError.message}`, "error");
+            console.error("[Configurações] Falha no fallback:", fallbackError);
+            exibirToast("Não foi possível salvar as configurações. Tente novamente.", "error");
           } else {
             exibirToast(
               "Cor salva! Nota: adicione a coluna 'logo_url' na tabela empresas no Supabase para persistir a logo.",
@@ -231,7 +239,11 @@ function ConfiguracoesConteudo() {
           return;
         }
 
-        exibirToast(`Erro ao salvar: ${updateError.message}`, "error");
+        if (updateError.message.includes("permission denied")) {
+          exibirToast("Permissão negada. Você só pode alterar a sua própria clínica.", "error");
+        } else {
+          exibirToast("Não foi possível salvar as alterações. Tente novamente.", "error");
+        }
         return;
       }
 
