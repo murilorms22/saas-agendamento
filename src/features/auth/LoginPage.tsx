@@ -13,11 +13,9 @@ import {
   LogIn,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { useProfessional } from "../../store/useProfessional";
 
 export default function LoginPage() {
   const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword } = useAuth();
-  const { profissional } = useProfessional();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -103,9 +101,6 @@ export default function LoginPage() {
     }
   };
 
-  const nomeClinica = profissional?.nomeClinica || "Plataforma de Agendamentos";
-  const profissao = profissional?.profissao || "Profissional de Saúde";
-
   return (
     <div className="min-h-screen bg-background relative flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden">
       {/* Background Decorativo com Formas Orgânicas e Gradientes Suaves */}
@@ -120,7 +115,7 @@ export default function LoginPage() {
           className="inline-flex items-center gap-2 text-xs font-body font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-xl hover:bg-secondary/60"
         >
           <ArrowLeft size={14} />
-          Voltar para página de agendamentos
+          Voltar ao início
         </Link>
       </div>
 
@@ -139,7 +134,7 @@ export default function LoginPage() {
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-body font-bold uppercase tracking-wider mb-2.5">
             <Sparkles size={12} />
-            Área Exclusiva do Profissional
+            Área do Profissional
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-foreground tracking-tight">
@@ -147,7 +142,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="text-xs sm:text-sm font-body text-muted-foreground mt-2 leading-relaxed">
-            Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos em <strong className="text-foreground">{nomeClinica}</strong>.
+            Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos.
           </p>
         </div>
 
@@ -339,7 +334,7 @@ export default function LoginPage() {
 
       {/* Rodapé institucional */}
       <footer className="mt-8 text-center text-xs font-body text-muted-foreground/80">
-        <p>© {new Date().getFullYear()} {nomeClinica} • {profissao}</p>
+        <p>© {new Date().getFullYear()} Plataforma de Agendamentos • Todos os direitos reservados</p>
       </footer>
     </div>
   );

@@ -223,6 +223,13 @@ export function ProfessionalProvider({
     let cancelado = false; // evita setState após desmontagem
 
     async function carregarDados() {
+      // Na rota de login (/login), não carrega nenhuma empresa para manter o portal SaaS limpo e neutro
+      if (location.pathname === "/login") {
+        setIsLoading(false);
+        setProfissional(null);
+        return;
+      }
+
       const isAdminRoute = location.pathname.startsWith("/admin");
 
       // Se for rota administrativa e o Supabase Auth ainda estiver verificando a sessão, aguarda

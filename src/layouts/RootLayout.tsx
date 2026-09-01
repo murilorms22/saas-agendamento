@@ -24,7 +24,7 @@ export default function RootLayout() {
         </div>
         <nav className="flex items-center gap-3">
           <Link
-            to="/admin"
+            to="/login"
             className="text-xs font-body font-semibold text-muted-foreground hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-primary/5"
           >
             Acesso Profissional
@@ -48,7 +48,7 @@ export default function RootLayout() {
         <div className="flex items-center gap-4">
           <p className="font-body">{profissao}</p>
           <Link
-            to="/admin"
+            to="/login"
             className="font-body text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors"
           >
             Área do Profissional
