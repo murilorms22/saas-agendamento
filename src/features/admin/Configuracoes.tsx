@@ -202,7 +202,7 @@ function ConfiguracoesConteudo() {
           especialidade: especialidade.trim() || profissional.profissao,
         })
         .eq("id", profissional.id)
-        .eq("user_id", user.id);
+        .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
 
       if (updateError) {
         console.error("[Configurações] Erro ao atualizar empresa:", updateError);
@@ -217,7 +217,7 @@ function ConfiguracoesConteudo() {
               especialidade: especialidade.trim() || profissional.profissao,
             })
             .eq("id", profissional.id)
-            .eq("user_id", user.id);
+            .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
 
           if (fallbackError) {
             exibirToast(`Erro ao atualizar: ${fallbackError.message}`, "error");
