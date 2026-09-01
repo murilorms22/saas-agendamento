@@ -49,6 +49,7 @@ import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
 import { ModalNovoAgendamento } from "../../components/ModalNovoAgendamento";
 import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
+import confetti from "canvas-confetti";
 
 // ──────────────────────────────────────────────────────────────
 // Tipos
@@ -191,14 +192,90 @@ function BadgeStatus({ status }: { status: StatusAgendamento }) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Sub-componente: Mini Animação de Puff / Fumaça ao excluir agendamento
+// ──────────────────────────────────────────────────────────────
+
+function EfeitoPuffFumaca() {
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30 overflow-visible">
+      {/* 1. Pulso central de fumaça inicial */}
+      <motion.div
+        initial={{ scale: 0.1, opacity: 0.95 }}
+        animate={{ scale: [0.1, 1.4, 2.2], opacity: [0.95, 0.6, 0] }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="w-14 h-14 rounded-full bg-slate-300/90 dark:bg-slate-400/80 blur-[2px] absolute shadow-lg"
+      />
+      {/* 2. Círculo de expansão rápida / onda de choque */}
+      <motion.div
+        initial={{ scale: 0.2, opacity: 0.8 }}
+        animate={{ scale: [0.2, 1.8, 2.6], opacity: [0.8, 0.3, 0] }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
+        className="w-16 h-16 rounded-full border-2 border-slate-300 dark:border-slate-400 blur-[1px] absolute"
+      />
+      {/* 3. Partículas e nuvenzinhas em puff saindo radialmente */}
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => {
+        const rad = (angle * Math.PI) / 180;
+        const dist = 32 + (i % 2 === 0 ? 12 : 0);
+        const x = Math.cos(rad) * dist;
+        const y = Math.sin(rad) * dist;
+        return (
+          <motion.div
+            key={i}
+            initial={{ x: 0, y: 0, scale: 0.6, opacity: 1 }}
+            animate={{
+              x,
+              y,
+              scale: [0.6, 1.3, 0],
+              opacity: [1, 0.8, 0],
+            }}
+            transition={{
+              duration: 0.52,
+              ease: "easeOut",
+              delay: 0.02 + (i % 3) * 0.015,
+            }}
+            className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-300 blur-[1px] absolute shadow-sm"
+          />
+        );
+      })}
+      {/* 4. Estrelinhas / sparkles mágicos de poof */}
+      {[30, 110, 190, 260].map((angle, i) => {
+        const rad = (angle * Math.PI) / 180;
+        const dist = 38;
+        const x = Math.cos(rad) * dist;
+        const y = Math.sin(rad) * dist;
+        return (
+          <motion.div
+            key={`sparkle-${i}`}
+            initial={{ x: 0, y: 0, scale: 0, opacity: 1, rotate: 0 }}
+            animate={{
+              x,
+              y,
+              scale: [0, 1.4, 0],
+              opacity: [1, 0.9, 0],
+              rotate: 180,
+            }}
+            transition={{ duration: 0.48, ease: "easeOut", delay: 0.04 }}
+            className="absolute text-amber-400 font-black text-xs select-none"
+          >
+            ✦
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
 // Sub-componente: Card de Agendamento na grade semanal
 // ──────────────────────────────────────────────────────────────
 
 function CardAgendamento({
   ag,
+  isExcluindo,
   onVerDetalhes,
 }: {
   ag: AgendamentoSemana;
+  isExcluindo?: boolean;
   onVerDetalhes: (ag: AgendamentoSemana) => void;
 }) {
   const fundos: Record<StatusAgendamento, string> = {
@@ -211,10 +288,36 @@ function CardAgendamento({
   return (
     <motion.div
       layout
-      onClick={() => onVerDetalhes(ag)}
-      className={`w-full text-left p-2.5 rounded-xl border transition-all text-xs cursor-pointer group hover:shadow-md hover:-translate-y-0.5 ${fundos[ag.status]}`}
+      id={`card-agendamento-${ag.id}`}
+      onClick={() => !isExcluindo && onVerDetalhes(ag)}
+      animate={
+        isExcluindo
+          ? {
+              scale: [1, 1.06, 0.85, 0],
+              opacity: [1, 1, 0.4, 0],
+              filter: ["blur(0px)", "blur(1px)", "blur(6px)", "blur(12px)"],
+              transition: { duration: 0.5, ease: "easeInOut" },
+            }
+          : { opacity: 1, scale: 1, filter: "blur(0px)" }
+      }
+      exit={{
+        opacity: 0,
+        scale: 0,
+        height: 0,
+        marginBottom: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        transition: { duration: 0.35, ease: "easeInOut" },
+      }}
+      transition={{
+        layout: { type: "spring", stiffness: 350, damping: 26 },
+      }}
+      className={`w-full text-left p-2.5 rounded-xl border transition-colors text-xs cursor-pointer group hover:shadow-md hover:-translate-y-0.5 relative overflow-visible ${
+        fundos[ag.status]
+      }`}
       title="Clique para ver detalhes e editar este agendamento"
     >
+      {isExcluindo && <EfeitoPuffFumaca />}
       <p className="font-display font-bold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
         {ag.nomeCliente}
       </p>
@@ -273,6 +376,9 @@ function VisualizadorAgenda({
   // Estado do Modal de Detalhes
   const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<AgendamentoSemana | null>(null);
 
+  // Estado da animação de puff/exclusão
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
+
   // Estado do Modal de Edição (reutiliza ModalNovoAgendamento)
   const [agendamentoParaEditar, setAgendamentoParaEditar] = useState<AgendamentoSemana | null>(null);
 
@@ -294,10 +400,44 @@ function VisualizadorAgenda({
     setModalNovo({ aberto: true, data: parseISO(ag.data) });
   };
 
-  const handleExcluirAgendamento = (id: string) => {
+  const handleExcluirAgendamento = async (id: string) => {
+    // 1. Fecha o modal de detalhes para o usuário ver o card na agenda
+    setAgendamentoDetalhes(null);
+
+    // 2. Ativa o estado de exclusão com puff
+    setExcluindoId(id);
+
+    // 3. Dispara partículas canvas-confetti a partir da posição exata do card
+    try {
+      const el = document.getElementById(`card-agendamento-${id}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const x = (rect.left + rect.width / 2) / window.innerWidth;
+        const y = (rect.top + rect.height / 2) / window.innerHeight;
+        confetti({
+          particleCount: 28,
+          spread: 70,
+          startVelocity: 13,
+          ticks: 45,
+          gravity: 0.85,
+          origin: { x, y },
+          colors: ["#94a3b8", "#cbd5e1", "#f1f5f9", "#e2e8f0", "#38bdf8", "#fbbf24"],
+          shapes: ["circle"],
+          scalar: 0.65,
+        });
+      }
+    } catch (e) {
+      console.warn("Erro ao disparar partículas de puff:", e);
+    }
+
+    // 4. Segura o tempo visual do puff
+    await new Promise((res) => setTimeout(res, 520));
+
+    // 5. Exclui o card (os próximos cards sobem suavemente com spring layout)
     if (onExcluirAgendamento) {
       onExcluirAgendamento(id);
     }
+    setExcluindoId(null);
   };
 
   // Abre a visão detalhada de um dia específico hora a hora
@@ -604,77 +744,107 @@ function VisualizadorAgenda({
                     <div className="flex-1 p-3 sm:p-4 w-full">
                       {agsNestaHora.length > 0 ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                          {agsNestaHora.map((ag) => (
-                            <div
-                              key={ag.id}
-                              className={`p-4 rounded-2xl border-l-4 border transition-all duration-300 bg-background/90 shadow-sm flex flex-col justify-between gap-3 ${
-                                ag.status === "Confirmado"
-                                  ? "border-l-emerald-500 border-border/30 shadow-emerald-500/5"
-                                  : ag.status === "Cancelado"
-                                  ? "border-l-rose-500 border-border/20 opacity-60 grayscale-[30%]"
-                                  : "border-l-primary border-border/30 shadow-primary/5"
-                              }`}
-                            >
-                              <div
-                                onClick={() => setAgendamentoDetalhes(ag)}
-                                className="flex items-start justify-between gap-3 cursor-pointer group/header"
-                                title="Clique para ver detalhes completos e editar"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-extrabold text-sm shrink-0 shadow-inner group-hover/header:scale-105 transition-transform">
-                                    {ag.nomeCliente.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <h4 className="font-display font-bold text-base text-foreground leading-snug group-hover/header:text-primary group-hover/header:underline transition-colors">
-                                      {ag.nomeCliente}
-                                    </h4>
-                                    <p className="font-body text-xs font-semibold text-primary mt-0.5">
-                                      {ag.servico}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Ações Rápidas de Edição e Cancelamento + Horário e Status à direita */}
-                              <div className="flex items-center justify-between pt-2.5 border-t border-border/20 gap-2">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditarAgendamento(ag)}
-                                    className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                                    title="Editar consulta"
+                          <AnimatePresence mode="popLayout">
+                            {agsNestaHora.map((ag) => {
+                              const isExcluindo = excluindoId === ag.id;
+                              return (
+                                <motion.div
+                                  key={ag.id}
+                                  layout
+                                  id={`card-agendamento-${ag.id}`}
+                                  animate={
+                                    isExcluindo
+                                      ? {
+                                          scale: [1, 1.06, 0.85, 0],
+                                          opacity: [1, 1, 0.4, 0],
+                                          filter: ["blur(0px)", "blur(1px)", "blur(6px)", "blur(12px)"],
+                                          transition: { duration: 0.5, ease: "easeInOut" },
+                                        }
+                                      : { opacity: 1, scale: 1, filter: "blur(0px)" }
+                                  }
+                                  exit={{
+                                    opacity: 0,
+                                    scale: 0,
+                                    height: 0,
+                                    marginBottom: 0,
+                                    paddingTop: 0,
+                                    paddingBottom: 0,
+                                    transition: { duration: 0.35, ease: "easeInOut" },
+                                  }}
+                                  transition={{
+                                    layout: { type: "spring", stiffness: 350, damping: 26 },
+                                  }}
+                                  className={`p-4 rounded-2xl border-l-4 border transition-colors bg-background/90 shadow-sm flex flex-col justify-between gap-3 relative overflow-visible ${
+                                    ag.status === "Confirmado"
+                                      ? "border-l-emerald-500 border-border/30 shadow-emerald-500/5"
+                                      : ag.status === "Cancelado"
+                                      ? "border-l-rose-500 border-border/20 opacity-60 grayscale-[30%]"
+                                      : "border-l-primary border-border/30 shadow-primary/5"
+                                  }`}
+                                >
+                                  {isExcluindo && <EfeitoPuffFumaca />}
+                                  <div
+                                    onClick={() => !isExcluindo && setAgendamentoDetalhes(ag)}
+                                    className="flex items-start justify-between gap-3 cursor-pointer group/header"
+                                    title="Clique para ver detalhes completos e editar"
                                   >
-                                    <Pencil size={12} />
-                                    <span>Editar</span>
-                                  </button>
-                                  {ag.status !== "Confirmado" && (
-                                    <button
-                                      onClick={() => onAtualizarStatus?.(ag.id, "Confirmado")}
-                                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <CheckCircle2 size={12} /> Confirmar
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => setAgendamentoDetalhes(ag)}
-                                    className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                                    title="Cancelar consulta"
-                                  >
-                                    <Trash2 size={12} /> Cancelar
-                                  </button>
-                                </div>
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-extrabold text-sm shrink-0 shadow-inner group-hover/header:scale-105 transition-transform">
+                                        {ag.nomeCliente.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <h4 className="font-display font-bold text-base text-foreground leading-snug group-hover/header:text-primary group-hover/header:underline transition-colors">
+                                          {ag.nomeCliente}
+                                        </h4>
+                                        <p className="font-body text-xs font-semibold text-primary mt-0.5">
+                                          {ag.servico}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
 
-                                {/* Em baixo na direita, ao lado do horário */}
-                                <div className="flex items-center gap-1.5 ml-auto">
-                                  <span className="px-2.5 py-1 rounded-lg bg-secondary font-body font-bold text-xs text-foreground flex items-center gap-1 shadow-sm">
-                                    <Clock size={11} className="text-primary" />
-                                    {ag.horario}
-                                  </span>
-                                  <BadgeStatus status={ag.status} />
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                                  {/* Ações Rápidas de Edição e Cancelamento + Horário e Status à direita */}
+                                  <div className="flex items-center justify-between pt-2.5 border-t border-border/20 gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditarAgendamento(ag)}
+                                        className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                        title="Editar consulta"
+                                      >
+                                        <Pencil size={12} />
+                                        <span>Editar</span>
+                                      </button>
+                                      {ag.status !== "Confirmado" && (
+                                        <button
+                                          onClick={() => onAtualizarStatus?.(ag.id, "Confirmado")}
+                                          className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <CheckCircle2 size={12} /> Confirmar
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => setAgendamentoDetalhes(ag)}
+                                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                        title="Cancelar consulta"
+                                      >
+                                        <Trash2 size={12} /> Cancelar
+                                      </button>
+                                    </div>
+
+                                    {/* Em baixo na direita, ao lado do horário */}
+                                    <div className="flex items-center gap-1.5 ml-auto">
+                                      <span className="px-2.5 py-1 rounded-lg bg-secondary font-body font-bold text-xs text-foreground flex items-center gap-1 shadow-sm">
+                                        <Clock size={11} className="text-primary" />
+                                        {ag.horario}
+                                      </span>
+                                      <BadgeStatus status={ag.status} />
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              );
+                            })}
+                          </AnimatePresence>
                         </div>
                       ) : (
                         /* Slot de Horário Livre */
@@ -759,13 +929,16 @@ function VisualizadorAgenda({
                           </span>
                         </div>
                       ) : (
-                        ags.map((ag) => (
-                          <CardAgendamento
-                            key={ag.id}
-                            ag={ag}
-                            onVerDetalhes={(selecionado) => setAgendamentoDetalhes(selecionado)}
-                          />
-                        ))
+                        <AnimatePresence mode="popLayout">
+                          {ags.map((ag) => (
+                            <CardAgendamento
+                              key={ag.id}
+                              ag={ag}
+                              isExcluindo={excluindoId === ag.id}
+                              onVerDetalhes={(selecionado) => setAgendamentoDetalhes(selecionado)}
+                            />
+                          ))}
+                        </AnimatePresence>
                       )}
                     </div>
                   </div>
