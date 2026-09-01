@@ -14,10 +14,12 @@ import {
   startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, ArrowLeft, CheckCircle2, Clock, Star, AlertCircle, X, User, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
+import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
+import { ModalAuthPaciente, type ClienteAutenticado } from "../../components/ModalAuthPaciente";
 import { supabase } from "../../lib/supabase";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,6 +46,11 @@ function LandingPageConteudo() {
   const { profissional: profissionalOuNull } = useProfessional();
   const profissional = profissionalOuNull!; // seguro: PageLoader garante não-null
 
+  // Autenticação do Paciente
+  const { user, signOut } = useAuth();
+  const [modalAuthAberto, setModalAuthAberto] = useState(false);
+  const [clienteLogado, setClienteLogado] = useState<ClienteAutenticado | null>(null);
+
   const [etapa, setEtapa] = useState<"selecao" | "formulario">("selecao");
   const [servicoSelecionado, setServicoSelecionado] = useState<number | null>(null);
 
@@ -60,6 +67,38 @@ function LandingPageConteudo() {
   // Trava de Segurança: Horários já reservados
   const [horariosOcupados, setHorariosOcupados] = useState<string[]>([]);
   const [erroConflito, setErroConflito] = useState<string | null>(null);
+
+  // Carrega automaticamente dados do paciente se ele já estiver autenticado
+  useEffect(() => {
+    async function carregarClienteAutenticado() {
+      if (!user?.id || !profissional?.id) {
+        setClienteLogado(null);
+        return;
+      }
+
+      try {
+        const { data: cliente } = await supabase
+          .from("clientes")
+          .select("*")
+          .eq("empresa_id", profissional.id)
+          .eq("auth_user_id", user.id)
+          .maybeSingle();
+
+        if (cliente) {
+          setClienteLogado(cliente);
+          if (cliente.nome) setNome(cliente.nome);
+          if (cliente.telefone) setWhatsapp(mascararTelefone(cliente.telefone));
+        } else if (user.user_metadata?.full_name || user.user_metadata?.phone) {
+          if (user.user_metadata.full_name) setNome(user.user_metadata.full_name);
+          if (user.user_metadata.phone) setWhatsapp(mascararTelefone(user.user_metadata.phone));
+        }
+      } catch (err) {
+        console.error("[LandingPage] Erro ao carregar paciente autenticado:", err);
+      }
+    }
+
+    carregarClienteAutenticado();
+  }, [user?.id, profissional?.id]);
 
   // Busca em tempo real os horários já agendados para a data selecionada
   useEffect(() => {
@@ -250,9 +289,23 @@ function LandingPageConteudo() {
 
   // ── Ações ───────────────────────────────────────────────────────────────────
   const handleContinuar = () => {
-    if (servicoSelecionado && dataSelecionada && horarioSelecionado) {
-      setEtapa("formulario");
+    if (!servicoSelecionado || !dataSelecionada || !horarioSelecionado) return;
+
+    // 🛡️ Se o paciente não estiver logado, intercepta com o modal de login/cadastro
+    if (!user) {
+      setModalAuthAberto(true);
+      return;
     }
+
+    setEtapa("formulario");
+  };
+
+  const handleAuthSucesso = (cliente: ClienteAutenticado) => {
+    setClienteLogado(cliente);
+    if (cliente.nome) setNome(cliente.nome);
+    if (cliente.telefone) setWhatsapp(mascararTelefone(cliente.telefone));
+    setModalAuthAberto(false);
+    setEtapa("formulario");
   };
 
   const [salvando, setSalvando] = useState(false);
@@ -261,10 +314,18 @@ function LandingPageConteudo() {
 
   const handleEnviar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (salvando) return; // 🛡️ Brecha 3: Bloqueio instantâneo contra Race Condition
+
+    // 🛡️ Se o usuário não estiver logado, intercepta com o modal
+    if (!user) {
+      setModalAuthAberto(true);
+      return;
+    }
+
     setSalvando(true);
 
     try {
-      // Sanitização estrita anti-XSS e anti-CSV Injection
+      // 🛡️ Brecha 2: Sanitização estrita anti-XSS e anti-CSV Injection
       const nomeSanitizado = sanitizarTexto(nome);
       const telefoneSanitizado = sanitizarTelefone(whatsapp);
 
@@ -283,17 +344,23 @@ function LandingPageConteudo() {
       const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
       // 1. Cadastra ou atualiza o cliente na base de clientes do profissional
+      let clienteIdEfetivo = clienteLogado?.id;
       try {
-        await supabase.from("clientes").upsert(
+        const { data: clienteAtualizado } = await supabase.from("clientes").upsert(
           {
             empresa_id: profissional.id,
             nome: nomeSanitizado,
             telefone: telefoneSanitizado,
+            auth_user_id: user.id,
           },
           { onConflict: "empresa_id,telefone" }
-        );
+        ).select().single();
+
+        if (clienteAtualizado?.id) {
+          clienteIdEfetivo = clienteAtualizado.id;
+        }
       } catch (clientErr) {
-        console.warn("Aviso ao cadastrar cliente:", clientErr);
+        console.warn("Aviso ao atualizar cliente:", clientErr);
       }
 
       // Valida servico_id para ser UUID válido ou null
@@ -321,9 +388,10 @@ function LandingPageConteudo() {
         return;
       }
 
-      // 2. Registra o agendamento no Supabase com os dados rigorosamente sanitizados
+      // 2. 🛡️ Brecha 4: Registra o agendamento no Supabase vinculado ao ID do cliente autenticado
       const { data: agCriado, error: agError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
+        cliente_id: clienteIdEfetivo ?? null, // Vínculo estrito com o cliente autenticado
         nome_cliente: nomeSanitizado,
         whatsapp_cliente: telefoneSanitizado,
         cliente_telefone: telefoneSanitizado,
@@ -742,6 +810,38 @@ function LandingPageConteudo() {
                   </div>
                 </div>
 
+                {/* 🛡️ Paciente Autenticado */}
+                {user && (
+                  <div className="flex items-center justify-between p-3.5 mb-6 rounded-2xl bg-primary/5 border border-primary/15 text-xs font-body max-w-md mx-auto">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold shrink-0">
+                        {clienteLogado?.nome ? clienteLogado.nome.charAt(0).toUpperCase() : <User size={14} />}
+                      </div>
+                      <div className="truncate">
+                        <p className="font-bold text-foreground truncate">
+                          {clienteLogado?.nome || user.user_metadata?.full_name || "Paciente Autenticado"}
+                        </p>
+                        <p className="text-muted-foreground text-[11px] truncate">{user.email}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await signOut();
+                        setClienteLogado(null);
+                        setNome("");
+                        setWhatsapp("");
+                        setEtapa("selecao");
+                      }}
+                      title="Sair desta conta"
+                      className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors px-2.5 py-1 rounded-lg hover:bg-destructive/10 shrink-0 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <LogOut size={13} />
+                      Trocar conta
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleEnviar} className="space-y-5 max-w-md mx-auto">
                   <div className="space-y-1.5">
                     <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -833,6 +933,15 @@ function LandingPageConteudo() {
           )}
 
         </AnimatePresence>
+
+        {/* 🛡️ Modal de Autenticação / Cadastro de Pacientes */}
+        <ModalAuthPaciente
+          aberto={modalAuthAberto}
+          onFechar={() => setModalAuthAberto(false)}
+          empresaId={profissional.id}
+          nomeClinica={profissional.nomeClinica}
+          onSucesso={handleAuthSucesso}
+        />
       </div>
     </div>
   );
