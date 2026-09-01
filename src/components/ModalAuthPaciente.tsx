@@ -319,6 +319,8 @@ export function ModalAuthPaciente({
       if (authError) {
         if (authError.message.includes("User already registered")) {
           setMensagemErro("Este e-mail já possui cadastro. Clique na aba 'Entrar' para acessar.");
+        } else if (authError.message.toLowerCase().includes("rate limit")) {
+          setMensagemErro("Muitas tentativas de cadastro recentes (limite de envio de e-mails atingido). Aguarde alguns instantes ou desative a confirmação de e-mail no painel do Supabase.");
         } else {
           setMensagemErro(authError.message || "Erro ao cadastrar conta.");
         }
