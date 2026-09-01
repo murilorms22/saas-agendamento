@@ -509,22 +509,35 @@ function FluxoAgendamentoConteudo() {
     const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
     try {
-      // 🛡️ 1. Trava de Concorrência: Checa conflito no banco
+      // 🛡️ 1. Trava de Concorrência (Race Condition Check): Checa se o horário já foi ocupado
       const { data: conflitos, error: errConflito } = await supabase
         .from("agendamentos")
         .select("id")
         .eq("empresa_id", profissional.id)
         .eq("data", dataStr)
-        .eq("horario", horarioSelecionado)
+        .or(`horario.eq.${horarioSelecionado},horario.eq.${horarioSelecionado}:00`)
         .neq("status", "Cancelado")
         .limit(1);
 
       if (!errConflito && conflitos && conflitos.length > 0) {
-        exibirToast(`O horário das ${horarioSelecionado} acabou de ser reservado. Escolha outro horário.`, "warning");
-        setPassoAtual(2);
-        setHorariosOcupados((prev) => [...prev, horarioSelecionado]);
-        setHorarioSelecionado(null);
+        // Interrompe o fluxo imediatamente e reseta o loading
         setSalvando(false);
+
+        // Exibe Toast de aviso amigável (estilo Warning)
+        exibirToast(
+          "Ops! Este horário acabou de ser reservado por outro cliente. Por favor, escolha outro horário disponível.",
+          "warning"
+        );
+
+        // Adiciona à lista de ocupados para atualizar a grade visual
+        setHorariosOcupados((prev) => [...prev, horarioSelecionado]);
+
+        // Limpa o estado do horário anterior
+        setHorarioSelecionado(null);
+
+        // Retorna o usuário automaticamente para a Etapa 2 (Data e Hora)
+        setPassoAtual(2);
+
         return;
       }
 
