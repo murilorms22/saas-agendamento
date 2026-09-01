@@ -288,37 +288,7 @@ export function ProfessionalProvider({
             }
           }
 
-          // Se ainda não houver empresa vinculada, provisiona automaticamente uma clínica para o novo profissional
-          if (!empresaData && user.id) {
-            const nomeProfissional =
-              user.user_metadata?.full_name || user.email?.split("@")[0] || "Meu Consultório";
-            const slugLimpo = nomeProfissional
-              .toLowerCase()
-              .normalize("NFD")
-              .replace(/[\u0300-\u036f]/g, "")
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-+|-+$/g, "");
-            const slugFinal = `${slugLimpo || "consultorio"}-${user.id.slice(0, 6)}`;
-
-            const { data: novaEmpresa, error: errCriar } = await supabase
-              .from("empresas")
-              .insert({
-                user_id: user.id,
-                auth_user_id: user.id,
-                nome_negocio: nomeProfissional,
-                slug: slugFinal,
-                especialidade: "Atendimento Profissional",
-                cor_primaria: "#0d9488",
-              })
-              .select()
-              .single();
-
-            if (!errCriar && novaEmpresa) {
-              empresaData = novaEmpresa;
-            }
-          }
-
-          // Se nenhuma clínica foi encontrada ou criada para este usuário autenticado:
+          // Se nenhuma clínica foi encontrada para este usuário autenticado:
           // Força signOut() e redireciona imediatamente para o login com erro claro
           if (!empresaData) {
             console.warn("[useProfessional] Nenhuma clínica vinculada a este usuário. Forçando logout.");
@@ -327,7 +297,7 @@ export function ProfessionalProvider({
               setIsLoading(false);
               navigate("/login", {
                 state: {
-                  erro: "Clínica não encontrada. Nenhuma clínica está associada a esta conta.",
+                  erro: "Acesso restrito. Nenhuma clínica está associada a esta conta. Entre em contato com o suporte.",
                 },
                 replace: true,
               });

@@ -11,32 +11,23 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  User,
-  UserPlus,
-  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
   const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Modo da tela: "login" ou "cadastro"
-  const [modo, setModo] = useState<"login" | "cadastro">("login");
-
   // Estados dos inputs
-  const [nomeCadastro, setNomeCadastro] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Estados de requisição e feedbacks
+  // Estados de requisição e erros
   const [enviandoEmail, setEnviandoEmail] = useState(false);
   const [iniciandoGoogle, setIniciandoGoogle] = useState(false);
   const [erroLogin, setErroLogin] = useState<string | null>(null);
-  const [sucessoCadastro, setSucessoCadastro] = useState<string | null>(null);
 
   const carregandoGeral = authLoading || enviandoEmail || iniciandoGoogle;
 
@@ -59,7 +50,6 @@ export default function LoginPage() {
   const handleLoginEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErroLogin(null);
-    setSucessoCadastro(null);
 
     if (!email.trim() || !password) {
       setErroLogin("Por favor, preencha o e-mail e a senha.");
@@ -92,75 +82,16 @@ export default function LoginPage() {
     }
   };
 
-  // Handler de cadastro com e-mail e senha
-  const handleCadastroEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErroLogin(null);
-    setSucessoCadastro(null);
-
-    if (!nomeCadastro.trim()) {
-      setErroLogin("Por favor, preencha seu nome completo.");
-      return;
-    }
-
-    if (!email.trim() || !password) {
-      setErroLogin("Por favor, preencha o e-mail e a senha.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setErroLogin("A senha deve conter no mínimo 6 caracteres.");
-      return;
-    }
-
-    setEnviandoEmail(true);
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            full_name: nomeCadastro.trim(),
-          },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("User already registered")) {
-          setErroLogin("Este e-mail já está cadastrado. Clique em 'Fazer login' para entrar.");
-        } else {
-          setErroLogin(error.message || "Falha ao criar conta. Tente novamente.");
-        }
-        setEnviandoEmail(false);
-        return;
-      }
-
-      if (data.session) {
-        // Usuário criado e sessão ativa: o useEffect redirecionará
-        setEnviandoEmail(false);
-      } else {
-        setSucessoCadastro("Conta criada com sucesso! Verifique sua caixa de entrada para confirmar seu e-mail.");
-        setEnviandoEmail(false);
-      }
-    } catch (err: any) {
-      console.error("Erro ao cadastrar:", err);
-      setErroLogin("Ocorreu uma falha inesperada ao processar o cadastro.");
-      setEnviandoEmail(false);
-    }
-  };
-
-  // Handler de login / cadastro com Google OAuth
+  // Handler de login com Google OAuth
   const handleLoginGoogle = async () => {
     setErroLogin(null);
-    setSucessoCadastro(null);
     setIniciandoGoogle(true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
         setErroLogin(
           error.message ||
-          "Não foi possível conectar com o Google. Verifique o serviço."
+          "Não foi possível iniciar o login com o Google. Verifique a configuração do provedor no Supabase."
         );
         setIniciandoGoogle(false);
       }
@@ -172,10 +103,12 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background relative flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden">
-      {/* Background Decorativo com Formas Orgânicas e Gradientes Suaves */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-b from-primary/15 via-primary/5 to-transparent rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      {/* Background Decorativo Glassmorphism & Light Mode */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary/10 blur-3xl opacity-70" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-accent/10 blur-3xl opacity-70" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-secondary/30 blur-[100px] opacity-40" />
+      </div>
 
       {/* Botão de Retorno ao Início */}
       <div className="w-full max-w-md mb-6">
@@ -195,7 +128,7 @@ export default function LoginPage() {
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-md bg-card/90 backdrop-blur-md rounded-3xl p-8 sm:p-10 shadow-floating border border-border/40 relative z-10"
       >
-        {/* Topo: Ícone e Identidade */}
+        {/* Topo: Ícone e Identidade Neutra Multi-tenant */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-4 shadow-soft border border-primary/20">
             <Shield size={26} className="stroke-[2.2]" />
@@ -207,13 +140,11 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-foreground tracking-tight">
-            {modo === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
+            Bem-vindo de volta
           </h1>
 
           <p className="text-xs sm:text-sm font-body text-muted-foreground mt-2 leading-relaxed">
-            {modo === "login"
-              ? "Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos."
-              : "Cadastre-se para começar a gerenciar sua agenda, horários e atendimentos."}
+            Acesse seu painel para gerenciar consultas, configurar sua disponibilidade e acompanhar seus atendimentos.
           </p>
         </div>
 
@@ -231,47 +162,8 @@ export default function LoginPage() {
           </motion.div>
         )}
 
-        {/* Mensagem de Sucesso no Cadastro, se houver */}
-        {sucessoCadastro && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-body font-medium flex items-start gap-2.5"
-          >
-            <CheckCircle2 size={17} className="shrink-0 mt-0.5 text-emerald-600" />
-            <div className="flex-1 leading-relaxed">
-              <span>{sucessoCadastro}</span>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Formulário de Email e Senha (ou Cadastro) */}
-        <form onSubmit={modo === "login" ? handleLoginEmail : handleCadastroEmail} className="space-y-4">
-          {/* Campo Nome Completo (Apenas no Modo Cadastro) */}
-          {modo === "cadastro" && (
-            <div>
-              <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                Nome Completo
-              </label>
-              <div className="relative">
-                <User
-                  size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                />
-                <input
-                  type="text"
-                  value={nomeCadastro}
-                  onChange={(e) => setNomeCadastro(e.target.value)}
-                  placeholder="Seu nome completo"
-                  required
-                  maxLength={80}
-                  disabled={carregandoGeral}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
-                />
-              </div>
-            </div>
-          )}
-
+        {/* Formulário de Email e Senha */}
+        <form onSubmit={handleLoginEmail} className="space-y-4">
           <div>
             <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
               E-mail
@@ -295,7 +187,7 @@ export default function LoginPage() {
 
           <div>
             <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Senha {modo === "cadastro" && <span className="font-normal text-[11px] lowercase">(mínimo 6 caracteres)</span>}
+              Senha
             </label>
             <div className="relative">
               <Lock
@@ -306,9 +198,8 @@ export default function LoginPage() {
                 type={mostrarSenha ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={modo === "cadastro" ? "Crie sua senha segura" : "••••••••"}
+                placeholder="••••••••"
                 required
-                minLength={modo === "cadastro" ? 6 : undefined}
                 disabled={carregandoGeral}
                 className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
               />
@@ -324,7 +215,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Botão Submit */}
+          {/* Botão Submit Entrar */}
           <motion.button
             whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
             whileTap={carregandoGeral ? {} : { scale: 0.98 }}
@@ -353,12 +244,12 @@ export default function LoginPage() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                <span>{modo === "login" ? "Entrando..." : "Cadastrando..."}</span>
+                <span>Entrando...</span>
               </>
             ) : (
               <>
-                {modo === "login" ? <LogIn size={16} /> : <UserPlus size={16} />}
-                <span>{modo === "login" ? "Entrar" : "Criar Conta"}</span>
+                <LogIn size={16} />
+                <span>Entrar</span>
               </>
             )}
           </motion.button>
@@ -374,7 +265,7 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Botão de Destaque: Google OAuth */}
+        {/* Botão de Destaque: Entrar com Google */}
         <div>
           <motion.button
             whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
@@ -428,45 +319,10 @@ export default function LoginPage() {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>{modo === "login" ? "Entrar com Google" : "Cadastrar com Google"}</span>
+                <span>Entrar com Google</span>
               </>
             )}
           </motion.button>
-        </div>
-
-        {/* ── Opção de Alternância: Não tem uma conta? / Já tem uma conta? ── */}
-        <div className="text-center mt-6 pt-5 border-t border-border/30">
-          {modo === "login" ? (
-            <p className="text-xs sm:text-sm font-body text-muted-foreground">
-              Não tem uma conta?
-              <button
-                type="button"
-                onClick={() => {
-                  setModo("cadastro");
-                  setErroLogin(null);
-                  setSucessoCadastro(null);
-                }}
-                className="font-bold text-primary hover:underline transition-all cursor-pointer ml-1.5"
-              >
-                Cadastre-se
-              </button>
-            </p>
-          ) : (
-            <p className="text-xs sm:text-sm font-body text-muted-foreground">
-              Já tem uma conta?
-              <button
-                type="button"
-                onClick={() => {
-                  setModo("login");
-                  setErroLogin(null);
-                  setSucessoCadastro(null);
-                }}
-                className="font-bold text-primary hover:underline transition-all cursor-pointer ml-1.5"
-              >
-                Fazer login
-              </button>
-            </p>
-          )}
         </div>
 
         {/* Informações Adicionais / Selo de Segurança */}
@@ -478,9 +334,9 @@ export default function LoginPage() {
         </div>
       </motion.div>
 
-      {/* Rodapé institucional */}
+      {/* Rodapé institucional neutro */}
       <footer className="mt-8 text-center text-xs font-body text-muted-foreground/80">
-        <p>© {new Date().getFullYear()} Fácil Agenda • Todos os direitos reservados</p>
+        <p>© {new Date().getFullYear()} Plataforma SaaS de Agendamentos • Todos os direitos reservados</p>
       </footer>
     </div>
   );
