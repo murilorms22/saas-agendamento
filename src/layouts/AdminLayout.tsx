@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { Calendar, Users, Settings, LayoutDashboard, LogOut, CalendarCheck, Loader2, Plus, CalendarDays } from "lucide-react";
 import { motion } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
+import { useAuth } from "../contexts/AuthContext";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
 import { supabase } from "../lib/supabase";
 
@@ -18,7 +19,13 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profissional, isLoading } = useProfessional();
+  const { user, signOut } = useAuth();
   const [modalAberto, setModalAberto] = useState(false);
+
+  const handleSair = async () => {
+    await signOut();
+    navigate("/login");
+  };
 
   const nomeClinica = profissional?.nomeClinica ?? "Carregando...";
   const profissao   = profissional?.profissao   ?? "";
@@ -142,14 +149,39 @@ export default function AdminLayout() {
           })}
         </nav>
 
-        {/* Sair */}
-        <div className="p-6 border-t border-border/20">
+        {/* Perfil autenticado + Botão Sair */}
+        <div className="p-4 border-t border-border/20 space-y-3">
+          {user && (
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-secondary/40 border border-border/30">
+              {user.user_metadata?.avatar_url ? (
+                <img
+                  src={user.user_metadata.avatar_url}
+                  alt={user.user_metadata?.full_name || "Usuário"}
+                  className="w-7 h-7 rounded-full border border-border shrink-0 object-cover"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                  {user.email?.charAt(0).toUpperCase() || "P"}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-body font-bold text-foreground truncate">
+                  {user.user_metadata?.full_name || "Profissional"}
+                </p>
+                <p className="text-[10px] font-body text-muted-foreground truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+          )}
+
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-sm transition-all cursor-pointer"
+            onClick={handleSair}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-xs transition-all cursor-pointer"
           >
-            <LogOut size={18} />
+            <LogOut size={16} />
             Sair
           </motion.button>
         </div>
