@@ -14,6 +14,7 @@ export interface AuthContextType {
   accessToken: string | null;
   isLoading: boolean;
   signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
 }
 
@@ -89,6 +90,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
+   * Autentica com e-mail e senha no Supabase Auth.
+   */
+  const signInWithPassword = async (
+    email: string,
+    password: string
+  ): Promise<{ error: AuthError | null }> => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setIsLoading(false);
+        return { error };
+      }
+      setUser(data.user);
+      setSession(data.session);
+      setIsLoading(false);
+      return { error: null };
+    } catch (err) {
+      setIsLoading(false);
+      return { error: err as AuthError };
+    }
+  };
+
+  /**
    * Encerra a sessão do profissional.
    */
   const signOut = async (): Promise<{ error: AuthError | null }> => {
@@ -117,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accessToken,
         isLoading,
         signInWithGoogle,
+        signInWithPassword,
         signOut,
       }}
     >

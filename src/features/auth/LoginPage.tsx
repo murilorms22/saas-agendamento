@@ -1,18 +1,37 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, ArrowLeft, AlertCircle, Sparkles } from "lucide-react";
+import {
+  Shield,
+  ArrowLeft,
+  AlertCircle,
+  Sparkles,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  LogIn,
+} from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProfessional } from "../../store/useProfessional";
 
 export default function LoginPage() {
-  const { user, isLoading: authLoading, signInWithGoogle } = useAuth();
+  const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword } = useAuth();
   const { profissional } = useProfessional();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [iniciandoLogin, setIniciandoLogin] = useState(false);
+  // Estados dos inputs
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+
+  // Estados de requisição e erros
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
+  const [iniciandoGoogle, setIniciandoGoogle] = useState(false);
   const [erroLogin, setErroLogin] = useState<string | null>(null);
+
+  const carregandoGeral = authLoading || enviandoEmail || iniciandoGoogle;
 
   // Redireciona se o usuário já estiver autenticado
   useEffect(() => {
@@ -22,9 +41,46 @@ export default function LoginPage() {
     }
   }, [user, authLoading, navigate, location.state]);
 
+  // Handler de login com e-mail e senha
+  const handleLoginEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroLogin(null);
+
+    if (!email.trim() || !password) {
+      setErroLogin("Por favor, preencha o e-mail e a senha.");
+      return;
+    }
+
+    setEnviandoEmail(true);
+
+    try {
+      const { error } = await signInWithPassword(email.trim(), password);
+
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          setErroLogin("E-mail ou senha incorretos. Verifique os dados digitados.");
+        } else if (error.message.includes("Email not confirmed")) {
+          setErroLogin("Este e-mail ainda não foi confirmado. Verifique sua caixa de entrada.");
+        } else if (error.message.includes("Too many requests")) {
+          setErroLogin("Muitas tentativas em pouco tempo. Aguarde alguns instantes.");
+        } else {
+          setErroLogin(error.message || "Falha ao realizar login. Tente novamente.");
+        }
+        setEnviandoEmail(false);
+      } else {
+        // Sucesso: useEffect redirecionará automaticamente
+        setEnviandoEmail(false);
+      }
+    } catch (err: any) {
+      setErroLogin("Ocorreu um erro inesperado ao conectar. Verifique sua internet.");
+      setEnviandoEmail(false);
+    }
+  };
+
+  // Handler de login com Google OAuth
   const handleLoginGoogle = async () => {
     setErroLogin(null);
-    setIniciandoLogin(true);
+    setIniciandoGoogle(true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
@@ -32,11 +88,11 @@ export default function LoginPage() {
           error.message ||
             "Não foi possível iniciar o login com o Google. Verifique a configuração do provedor no Supabase."
         );
-        setIniciandoLogin(false);
+        setIniciandoGoogle(false);
       }
     } catch (err: any) {
       setErroLogin("Ocorreu uma falha ao conectar com o serviço do Google. Tente novamente.");
-      setIniciandoLogin(false);
+      setIniciandoGoogle(false);
     }
   };
 
@@ -69,7 +125,7 @@ export default function LoginPage() {
         className="w-full max-w-md bg-card/90 backdrop-blur-md rounded-3xl p-8 sm:p-10 shadow-floating border border-border/40 relative z-10"
       >
         {/* Topo: Ícone e Identidade */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-4 shadow-soft border border-primary/20">
             <Shield size={26} className="stroke-[2.2]" />
           </div>
@@ -93,29 +149,132 @@ export default function LoginPage() {
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-body font-medium flex items-start gap-3"
+            className="mb-5 p-3.5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-body font-medium flex items-start gap-2.5"
           >
-            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <AlertCircle size={17} className="shrink-0 mt-0.5" />
             <div className="flex-1 leading-relaxed">
               <span>{erroLogin}</span>
             </div>
           </motion.div>
         )}
 
-        {/* Botão de Destaque Único: Entrar com Google */}
-        <div className="space-y-4">
+        {/* Formulário de Email e Senha */}
+        <form onSubmit={handleLoginEmail} className="space-y-4">
+          <div>
+            <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+              E-mail
+            </label>
+            <div className="relative">
+              <Mail
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu.email@exemplo.com"
+                required
+                disabled={carregandoGeral}
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-body font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+              Senha
+            </label>
+            <div className="relative">
+              <Lock
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                type={mostrarSenha ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                disabled={carregandoGeral}
+                className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarSenha(!mostrarSenha)}
+                disabled={carregandoGeral}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                title={mostrarSenha ? "Ocultar senha" : "Exibir senha"}
+              >
+                {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Botão Submit Entrar */}
           <motion.button
-            whileHover={iniciandoLogin ? {} : { scale: 1.02, y: -2 }}
-            whileTap={iniciandoLogin ? {} : { scale: 0.98 }}
-            onClick={handleLoginGoogle}
-            disabled={iniciandoLogin}
-            type="button"
-            className="w-full flex items-center justify-center gap-3.5 py-4 px-5 rounded-2xl bg-white text-slate-700 hover:text-slate-900 font-body font-bold text-sm sm:text-base border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+            whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
+            whileTap={carregandoGeral ? {} : { scale: 0.98 }}
+            type="submit"
+            disabled={carregandoGeral}
+            className="w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none mt-2"
           >
-            {iniciandoLogin ? (
+            {enviandoEmail ? (
               <>
                 <svg
-                  className="animate-spin w-5 h-5 text-primary"
+                  className="animate-spin w-4 h-4 text-current"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                <span>Entrando...</span>
+              </>
+            ) : (
+              <>
+                <LogIn size={16} />
+                <span>Entrar</span>
+              </>
+            )}
+          </motion.button>
+        </form>
+
+        {/* Divisor Visual Elegante */}
+        <div className="relative my-6 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border/50" />
+          </div>
+          <span className="relative bg-card px-3 text-[11px] font-body font-semibold uppercase tracking-wider text-muted-foreground/70">
+            ou continuar com
+          </span>
+        </div>
+
+        {/* Botão de Destaque: Entrar com Google */}
+        <div>
+          <motion.button
+            whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
+            whileTap={carregandoGeral ? {} : { scale: 0.98 }}
+            onClick={handleLoginGoogle}
+            disabled={carregandoGeral}
+            type="button"
+            className="w-full flex items-center justify-center gap-3 py-3.5 px-5 rounded-2xl bg-white text-slate-700 hover:text-slate-900 font-body font-bold text-sm border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+          >
+            {iniciandoGoogle ? (
+              <>
+                <svg
+                  className="animate-spin w-4 h-4 text-primary"
                   fill="none"
                   viewBox="0 0 24 24"
                 >
@@ -138,7 +297,7 @@ export default function LoginPage() {
             ) : (
               <>
                 {/* Ícone Autêntico SVG do Google */}
-                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -163,7 +322,7 @@ export default function LoginPage() {
         </div>
 
         {/* Informações Adicionais / Selo de Segurança */}
-        <div className="mt-8 pt-6 border-t border-border/20 text-center">
+        <div className="mt-8 pt-5 border-t border-border/20 text-center">
           <p className="text-[11px] font-body text-muted-foreground flex items-center justify-center gap-1.5">
             <Shield size={12} className="text-emerald-500" />
             Autenticação segura e criptografada via Supabase Auth
