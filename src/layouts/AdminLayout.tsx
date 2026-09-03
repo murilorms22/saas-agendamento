@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Calendar,
@@ -12,7 +12,7 @@ import {
   ChevronRight,
   ExternalLink,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
 import { useAuth } from "../contexts/AuthContext";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
@@ -34,16 +34,33 @@ export default function AdminLayout() {
   // ── Estado da Sidebar: Retraída (apenas ícones) vs Expandida (Overlay com títulos) ──
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
 
-  // Fecha a expansão da sidebar ao pressionar a tecla ESC
+  // Fecha a expansão da sidebar ao clicar fora ou pressionar a tecla ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && sidebarAberta) {
         setSidebarAberta(false);
       }
     };
+
+    const handleClickFora = (e: MouseEvent) => {
+      if (
+        sidebarAberta &&
+        sidebarRef.current &&
+        !sidebarRef.current.contains(e.target as Node)
+      ) {
+        setSidebarAberta(false);
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickFora);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickFora);
+    };
   }, [sidebarAberta]);
 
   const handleSair = async () => {
@@ -118,115 +135,70 @@ export default function AdminLayout() {
   return (
     <div className="h-[100dvh] w-full flex bg-gradient-to-br from-background via-background to-primary/5 text-foreground overflow-hidden relative">
 
-      {/* ── 1. Backdrop com blur escurecido quando a sidebar expandir em Overlay ── */}
-      <AnimatePresence>
-        {sidebarAberta && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setSidebarAberta(false)}
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[2px] cursor-pointer"
-            aria-hidden="true"
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── 2. Sidebar Sempre Visível: Retraída (Ícones) vs Expandida (Overlay com Títulos) ── */}
+      {/* ── Sidebar Sempre Visível: Retraída (Ícones) vs Expandida (Overlay sem escurecer a página) ── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/70 shadow-2xl transition-all duration-300 ease-in-out ${
+        ref={sidebarRef}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/80 shadow-2xl transition-all duration-300 ease-in-out ${
           sidebarAberta ? "w-72 sm:w-80" : "w-16 sm:w-20"
         }`}
         aria-label="Menu de Navegação Lateral"
       >
-        {/* Cabeçalho da Sidebar */}
-        <div
-          onClick={() => {
-            if (!sidebarAberta) setSidebarAberta(true);
-          }}
-          className={`bg-gradient-to-br from-primary via-primary to-primary/85 relative overflow-hidden text-white flex items-center transition-all duration-300 cursor-pointer ${
-            sidebarAberta ? "p-5 justify-between" : "p-3.5 sm:p-4 justify-center"
-          }`}
-        >
-          <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 blur-xl pointer-events-none" />
+        {/* Cabeçalho da Sidebar: O Chevron permanece no MESMO local fixo tanto aberta quanto fechada */}
+        <div className="h-16 border-b border-border/40 px-3 sm:px-3.5 flex items-center bg-card/80 transition-all duration-300">
+          {/* Botão Chevron: Posição FIXA inalterada tanto aberta quanto fechada */}
+          <button
+            type="button"
+            onClick={() => setSidebarAberta((prev) => !prev)}
+            className="w-10 h-10 rounded-xl bg-secondary/80 hover:bg-primary/15 text-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs border border-border/60 group"
+            title={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
+            aria-label={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
+          >
+            <ChevronRight
+              size={18}
+              className={`stroke-[2.5] transition-transform duration-300 ease-in-out ${
+                sidebarAberta ? "rotate-180 text-primary" : "rotate-0 text-muted-foreground group-hover:text-primary"
+              }`}
+            />
+          </button>
 
-          {/* Logo / Ícone da Clínica */}
-          <div className="relative z-10 flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-white/20 p-1 flex items-center justify-center shrink-0 border border-white/25 shadow-xs">
-              {isLoading ? (
-                <Loader2 size={20} className="animate-spin opacity-80" />
-              ) : profissional?.logoUrl ? (
-                <img
-                  src={profissional.logoUrl}
-                  alt={nomeClinica}
-                  className="w-full h-full object-contain rounded-lg"
-                />
-              ) : (
-                <CalendarCheck size={20} className="text-white" />
-              )}
-            </div>
-
-            {/* Informações detalhadas visíveis quando expandida */}
-            {sidebarAberta && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2 }}
-                className="min-w-0 flex-1"
-              >
-                <h2 className="font-display font-bold text-sm tracking-tight text-white leading-tight truncate">
+          {/* Logo / Nome da Clínica: Aparece suavemente ao lado do Chevron quando expandida */}
+          {sidebarAberta && (
+            <motion.div
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex items-center gap-2.5 min-w-0 pl-3 flex-1 overflow-hidden"
+            >
+              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden">
+                {isLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : profissional?.logoUrl ? (
+                  <img
+                    src={profissional.logoUrl}
+                    alt={nomeClinica}
+                    className="w-full h-full object-contain p-0.5"
+                  />
+                ) : (
+                  <CalendarCheck size={16} />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display font-bold text-xs tracking-tight text-foreground leading-tight truncate">
                   {nomeClinica}
                 </h2>
-                <p className="text-white/75 text-[10px] font-semibold uppercase tracking-wider mt-0.5 truncate">
-                  {profissao ? `${profissao} — Painel` : "Painel"}
+                <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider truncate">
+                  {profissao || "Painel"}
                 </p>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Botão com Chevron Animado para Alternar Expansão */}
-          {sidebarAberta && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSidebarAberta(false);
-              }}
-              className="relative z-10 w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
-              title="Recolher barra lateral"
-              aria-label="Recolher barra lateral"
-            >
-              <ChevronRight size={18} className="rotate-180 stroke-[3] transition-transform duration-300" />
-            </button>
+              </div>
+            </motion.div>
           )}
         </div>
-
-        {/* Botão de Toggle Chevron visível no modo retraído */}
-        {!sidebarAberta && (
-          <div className="py-2 flex justify-center border-b border-border/30">
-            <button
-              type="button"
-              onClick={() => setSidebarAberta(true)}
-              className="w-9 h-9 rounded-xl bg-secondary/80 hover:bg-primary/15 text-muted-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer group"
-              title="Expandir menu lateral"
-              aria-label="Expandir menu lateral"
-            >
-              <ChevronRight size={16} className="stroke-[2.5] group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          </div>
-        )}
 
         {/* Botão Novo Agendamento */}
         <div className={`py-3 transition-all duration-300 ${sidebarAberta ? "px-4" : "px-2 sm:px-2.5 flex justify-center"}`}>
           <button
             type="button"
-            onClick={() => {
-              if (!sidebarAberta) {
-                setSidebarAberta(true);
-              }
-              setModalAberto(true);
-            }}
+            onClick={() => setModalAberto(true)}
             title="Novo agendamento"
             className={`flex items-center rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group ${
               sidebarAberta
@@ -249,11 +221,6 @@ export default function AdminLayout() {
               <Link
                 key={to}
                 to={to}
-                onClick={() => {
-                  if (!sidebarAberta) {
-                    setSidebarAberta(true);
-                  }
-                }}
                 title={!sidebarAberta ? label : undefined}
                 className={`flex items-center rounded-xl font-body transition-all group ${
                   sidebarAberta
@@ -281,9 +248,6 @@ export default function AdminLayout() {
               href={`/${profissional?.slug || "studio-fisio"}`}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => {
-                if (!sidebarAberta) setSidebarAberta(true);
-              }}
               title={!sidebarAberta ? "Ver Página Pública" : undefined}
               className={`flex items-center rounded-xl font-body text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-all border border-border/40 group ${
                 sidebarAberta
@@ -308,10 +272,7 @@ export default function AdminLayout() {
         <div className={`border-t border-border/30 bg-card/60 transition-all duration-300 ${sidebarAberta ? "p-4 space-y-3" : "p-2 sm:p-2.5 flex flex-col items-center space-y-2"}`}>
           {user && (
             <div
-              onClick={() => {
-                if (!sidebarAberta) setSidebarAberta(true);
-              }}
-              className={`flex items-center rounded-xl bg-secondary/40 border border-border/30 cursor-pointer ${
+              className={`flex items-center rounded-xl bg-secondary/40 border border-border/30 ${
                 sidebarAberta ? "gap-2.5 px-3 py-2 w-full" : "w-11 h-11 sm:w-12 sm:h-12 justify-center p-1"
               }`}
               title={!sidebarAberta ? user.user_metadata?.full_name || user.email || "Perfil" : undefined}
