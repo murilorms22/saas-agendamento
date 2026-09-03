@@ -12,7 +12,7 @@ import {
   ChevronRight,
   ExternalLink,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
 import { useAuth } from "../contexts/AuthContext";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
@@ -31,11 +31,11 @@ export default function AdminLayout() {
   const { profissional, isLoading } = useProfessional();
   const { user, signOut } = useAuth();
 
-  // ── Estado da Barra Lateral Overlay (Abre/Fecha sem espremer o conteúdo) ──
+  // ── Estado da Sidebar: Retraída (apenas ícones) vs Expandida (Overlay com títulos) ──
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
 
-  // Fecha a sidebar ao pressionar a tecla ESC
+  // Fecha a expansão da sidebar ao pressionar a tecla ESC
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && sidebarAberta) {
@@ -57,7 +57,7 @@ export default function AdminLayout() {
   const isActive = (to: string, exact: boolean) =>
     exact ? location.pathname === to : location.pathname.startsWith(to);
 
-  // Obtém o título da rota ativa para o cabeçalho superior
+  // Título da tela ativa para o cabeçalho superior
   const itemAtual = navItems.find((item) => isActive(item.to, item.exact));
   const tituloPagina = itemAtual?.label ?? "Painel Administrativo";
   const IconePagina = itemAtual?.icon ?? LayoutDashboard;
@@ -116,200 +116,206 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col bg-gradient-to-br from-background via-background to-primary/5 text-foreground overflow-hidden relative">
+    <div className="h-[100dvh] w-full flex bg-gradient-to-br from-background via-background to-primary/5 text-foreground overflow-hidden relative">
 
-      {/* ── 1. Top Bar Superior Fixa / Fluida ── */}
-      <header className="w-full bg-card/80 backdrop-blur-xl border-b border-border/50 px-4 sm:px-8 py-3 flex items-center justify-between z-30 shrink-0 shadow-xs">
-        {/* Lado Esquerdo: Botão de Alternância da Sidebar com Chevron Animado */}
-        <div className="flex items-center gap-3.5">
-          <button
-            type="button"
-            onClick={() => setSidebarAberta((prev) => !prev)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background/90 hover:bg-secondary/80 border border-border/70 text-foreground font-body font-bold text-xs shadow-xs hover:shadow-soft transition-all duration-300 cursor-pointer group"
-            title={sidebarAberta ? "Recolher menu lateral (ESC)" : "Expandir menu lateral"}
-            aria-label={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
-            aria-expanded={sidebarAberta}
-          >
-            <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-              <ChevronRight
-                size={16}
-                className={`stroke-[3] transition-transform duration-300 ease-in-out ${
-                  sidebarAberta ? "rotate-180" : "rotate-0"
-                }`}
-              />
-            </div>
-            <span className="font-body font-semibold text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-              Menu
-            </span>
-          </button>
+      {/* ── 1. Backdrop com blur escurecido quando a sidebar expandir em Overlay ── */}
+      <AnimatePresence>
+        {sidebarAberta && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setSidebarAberta(false)}
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[2px] cursor-pointer"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
 
-          {/* Divisor vertical sutil */}
-          <div className="h-5 w-px bg-border/60 hidden sm:block" />
-
-          {/* Identificação da Tela Atual */}
-          <div className="hidden sm:flex items-center gap-2 text-foreground font-display font-bold text-sm">
-            <IconePagina size={17} className="text-primary stroke-[2.5]" />
-            <span>{tituloPagina}</span>
-          </div>
-        </div>
-
-        {/* Lado Direito: Logo / Nome da Clínica + Ação Rápida */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setModalAberto(true)}
-            className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-          >
-            <Plus size={14} className="stroke-[3]" />
-            <span>Novo Agendamento</span>
-          </button>
-
-          <div className="flex items-center gap-2.5 pl-2 sm:border-l sm:border-border/60">
-            {isLoading ? (
-              <Loader2 size={18} className="animate-spin text-primary" />
-            ) : profissional?.logoUrl ? (
-              <img
-                src={profissional.logoUrl}
-                alt={nomeClinica}
-                className="w-8 h-8 rounded-lg object-contain bg-secondary/60 p-0.5 border border-border/40 shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                <CalendarCheck size={16} />
-              </div>
-            )}
-            <div className="text-left hidden md:block">
-              <p className="font-display font-bold text-xs text-foreground leading-tight truncate max-w-[160px]">
-                {nomeClinica}
-              </p>
-              <p className="text-[10px] font-body text-muted-foreground truncate max-w-[160px]">
-                {profissao || "Painel"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ── 2. Camada de Fundo Escurecido (Overlay Backdrop) ── */}
-      {sidebarAberta && (
-        <div
-          onClick={() => setSidebarAberta(false)}
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 animate-in fade-in cursor-pointer"
-          aria-hidden="true"
-        />
-      )}
-
-      {/* ── 3. Barra Lateral Flexível do tipo Overlay (Sobreposição Total) ── */}
+      {/* ── 2. Sidebar Sempre Visível: Retraída (Ícones) vs Expandida (Overlay com Títulos) ── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 sm:w-80 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/70 shadow-2xl transition-transform duration-300 ease-in-out transform ${
-          sidebarAberta ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/70 shadow-2xl transition-all duration-300 ease-in-out ${
+          sidebarAberta ? "w-72 sm:w-80" : "w-16 sm:w-20"
         }`}
-        aria-label="Menu Lateral de Navegação"
+        aria-label="Menu de Navegação Lateral"
       >
-        {/* Cabeçalho estilizado da Sidebar */}
-        <div className="p-6 bg-gradient-to-br from-primary via-primary to-primary/80 relative overflow-hidden text-white flex items-center justify-between">
+        {/* Cabeçalho da Sidebar */}
+        <div
+          onClick={() => {
+            if (!sidebarAberta) setSidebarAberta(true);
+          }}
+          className={`bg-gradient-to-br from-primary via-primary to-primary/85 relative overflow-hidden text-white flex items-center transition-all duration-300 cursor-pointer ${
+            sidebarAberta ? "p-5 justify-between" : "p-3.5 sm:p-4 justify-center"
+          }`}
+        >
           <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 blur-xl pointer-events-none" />
 
-          <div className="relative z-10 flex-1 min-w-0 pr-2">
-            <div className="font-display font-bold text-base tracking-tight flex items-center gap-2 truncate">
+          {/* Logo / Ícone da Clínica */}
+          <div className="relative z-10 flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/20 p-1 flex items-center justify-center shrink-0 border border-white/25 shadow-xs">
               {isLoading ? (
-                <Loader2 size={20} className="animate-spin opacity-70 shrink-0" />
+                <Loader2 size={20} className="animate-spin opacity-80" />
               ) : profissional?.logoUrl ? (
                 <img
                   src={profissional.logoUrl}
                   alt={nomeClinica}
-                  className="w-7 h-7 rounded-lg object-contain bg-white/20 p-0.5 shrink-0"
+                  className="w-full h-full object-contain rounded-lg"
                 />
               ) : (
-                <CalendarCheck size={20} className="shrink-0" />
+                <CalendarCheck size={20} className="text-white" />
               )}
-              <span className="truncate">{nomeClinica}</span>
             </div>
-            <div className="text-white/70 text-[10px] font-semibold uppercase tracking-wider mt-1 truncate">
-              {profissao ? `${profissao} — Painel` : "Painel"}
-            </div>
+
+            {/* Informações detalhadas visíveis quando expandida */}
+            {sidebarAberta && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className="min-w-0 flex-1"
+              >
+                <h2 className="font-display font-bold text-sm tracking-tight text-white leading-tight truncate">
+                  {nomeClinica}
+                </h2>
+                <p className="text-white/75 text-[10px] font-semibold uppercase tracking-wider mt-0.5 truncate">
+                  {profissao ? `${profissao} — Painel` : "Painel"}
+                </p>
+              </motion.div>
+            )}
           </div>
 
-          {/* Botão de Fechar a Sidebar com Chevron Rotacionado (180°) */}
+          {/* Botão com Chevron Animado para Alternar Expansão */}
+          {sidebarAberta && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSidebarAberta(false);
+              }}
+              className="relative z-10 w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
+              title="Recolher barra lateral"
+              aria-label="Recolher barra lateral"
+            >
+              <ChevronRight size={18} className="rotate-180 stroke-[3] transition-transform duration-300" />
+            </button>
+          )}
+        </div>
+
+        {/* Botão de Toggle Chevron visível no modo retraído */}
+        {!sidebarAberta && (
+          <div className="py-2 flex justify-center border-b border-border/30">
+            <button
+              type="button"
+              onClick={() => setSidebarAberta(true)}
+              className="w-9 h-9 rounded-xl bg-secondary/80 hover:bg-primary/15 text-muted-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer group"
+              title="Expandir menu lateral"
+              aria-label="Expandir menu lateral"
+            >
+              <ChevronRight size={16} className="stroke-[2.5] group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        )}
+
+        {/* Botão Novo Agendamento */}
+        <div className={`py-3 transition-all duration-300 ${sidebarAberta ? "px-4" : "px-2 sm:px-2.5 flex justify-center"}`}>
           <button
             type="button"
-            onClick={() => setSidebarAberta(false)}
-            className="relative z-10 w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
-            title="Recolher menu lateral"
-            aria-label="Recolher menu lateral"
+            onClick={() => {
+              if (!sidebarAberta) {
+                setSidebarAberta(true);
+              }
+              setModalAberto(true);
+            }}
+            title="Novo agendamento"
+            className={`flex items-center rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group ${
+              sidebarAberta
+                ? "w-full justify-center gap-2.5 px-4 py-3"
+                : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
+            }`}
           >
-            <ChevronRight size={18} className="rotate-180 stroke-[3]" />
+            <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:rotate-90 duration-200 shrink-0">
+              <Plus size={14} className="stroke-[3]" />
+            </div>
+            {sidebarAberta && <span>Novo agendamento</span>}
           </button>
         </div>
 
-        {/* Botão Novo Agendamento dentro da Sidebar */}
-        <div className="p-4 pb-2">
-          <motion.button
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setSidebarAberta(false);
-              setModalAberto(true);
-            }}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg transition-all cursor-pointer group"
-          >
-            <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:rotate-90 duration-200">
-              <Plus size={14} className="stroke-[3]" />
-            </div>
-            <span>Novo agendamento</span>
-          </motion.button>
-        </div>
-
-        {/* Links de Navegação (Fecham a sidebar automaticamente ao clicar) */}
-        <nav className="flex-1 px-4 py-3 space-y-1.5 overflow-y-auto">
+        {/* Lista de Navegação */}
+        <nav className={`flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden ${sidebarAberta ? "px-4 py-2" : "px-2 py-2 flex flex-col items-center"}`}>
           {navItems.map(({ to, label, icon: Icon, exact }) => {
             const active = isActive(to, exact);
             return (
-              <motion.div
+              <Link
                 key={to}
-                whileHover={{ x: 3 }}
-                whileTap={{ scale: 0.98 }}
+                to={to}
+                onClick={() => {
+                  if (!sidebarAberta) {
+                    setSidebarAberta(true);
+                  }
+                }}
+                title={!sidebarAberta ? label : undefined}
+                className={`flex items-center rounded-xl font-body transition-all group ${
+                  sidebarAberta
+                    ? `gap-3.5 px-3.5 py-3 w-full text-sm font-semibold ${
+                        active
+                          ? "bg-primary text-primary-foreground shadow-soft font-bold"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      }`
+                    : `w-11 h-11 sm:w-12 sm:h-12 justify-center ${
+                        active
+                          ? "bg-primary text-primary-foreground shadow-soft"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      }`
+                }`}
               >
-                <Link
-                  to={to}
-                  onClick={() => setSidebarAberta(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-body font-semibold text-sm transition-all ${
-                    active
-                      ? "bg-primary text-primary-foreground shadow-soft font-bold"
-                      : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </Link>
-              </motion.div>
+                <Icon size={19} className="shrink-0 stroke-[2.2]" />
+                {sidebarAberta && <span className="truncate">{label}</span>}
+              </Link>
             );
           })}
 
           {/* Link para visualização da Landing Page do Cliente */}
-          <div className="pt-2">
+          <div className={`pt-2 w-full ${!sidebarAberta ? "flex justify-center" : ""}`}>
             <a
               href={`/${profissional?.slug || "studio-fisio"}`}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => setSidebarAberta(false)}
-              className="flex items-center justify-between px-4 py-3 rounded-xl font-body font-semibold text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-all border border-border/40 group"
+              onClick={() => {
+                if (!sidebarAberta) setSidebarAberta(true);
+              }}
+              title={!sidebarAberta ? "Ver Página Pública" : undefined}
+              className={`flex items-center rounded-xl font-body text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-all border border-border/40 group ${
+                sidebarAberta
+                  ? "justify-between px-3.5 py-2.5 w-full font-semibold"
+                  : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <ExternalLink size={15} className="text-primary group-hover:scale-110 transition-transform" />
-                <span>Ver Página Pública</span>
+                <ExternalLink size={16} className="text-primary group-hover:scale-110 transition-transform shrink-0" />
+                {sidebarAberta && <span>Ver Página Pública</span>}
               </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary font-mono text-muted-foreground">
-                Online
-              </span>
+              {sidebarAberta && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary font-mono text-muted-foreground shrink-0">
+                  Online
+                </span>
+              )}
             </a>
           </div>
         </nav>
 
-        {/* Perfil autenticado + Botão Sair */}
-        <div className="p-4 border-t border-border/20 space-y-3 bg-card/40">
+        {/* Rodapé da Sidebar: Perfil + Botão Sair */}
+        <div className={`border-t border-border/30 bg-card/60 transition-all duration-300 ${sidebarAberta ? "p-4 space-y-3" : "p-2 sm:p-2.5 flex flex-col items-center space-y-2"}`}>
           {user && (
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-secondary/40 border border-border/30">
+            <div
+              onClick={() => {
+                if (!sidebarAberta) setSidebarAberta(true);
+              }}
+              className={`flex items-center rounded-xl bg-secondary/40 border border-border/30 cursor-pointer ${
+                sidebarAberta ? "gap-2.5 px-3 py-2 w-full" : "w-11 h-11 sm:w-12 sm:h-12 justify-center p-1"
+              }`}
+              title={!sidebarAberta ? user.user_metadata?.full_name || user.email || "Perfil" : undefined}
+            >
               {user.user_metadata?.avatar_url ? (
                 <img
                   src={user.user_metadata.avatar_url}
@@ -321,41 +327,93 @@ export default function AdminLayout() {
                   {user.email?.charAt(0).toUpperCase() || "P"}
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-body font-bold text-foreground truncate">
-                  {user.user_metadata?.full_name || "Profissional"}
-                </p>
-                <p className="text-[10px] font-body text-muted-foreground truncate">
-                  {user.email}
-                </p>
-              </div>
+
+              {sidebarAberta && (
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-body font-bold text-foreground truncate">
+                    {user.user_metadata?.full_name || "Profissional"}
+                  </p>
+                  <p className="text-[10px] font-body text-muted-foreground truncate">
+                    {user.email}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setSidebarAberta(false);
-              handleSair();
-            }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-xs transition-all cursor-pointer"
+          <button
+            type="button"
+            onClick={handleSair}
+            title="Sair da Conta"
+            className={`flex items-center justify-center rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-xs transition-all cursor-pointer ${
+              sidebarAberta ? "w-full gap-2 px-4 py-2.5" : "w-11 h-11 sm:w-12 sm:h-12"
+            }`}
           >
-            <LogOut size={15} />
-            Sair da Conta
-          </motion.button>
+            <LogOut size={16} className="shrink-0" />
+            {sidebarAberta && <span>Sair</span>}
+          </button>
         </div>
       </aside>
 
-      {/* ── 4. Área Principal (Mantém 100% da largura útil w-full sem espremer) ── */}
-      <main className="flex-1 w-full overflow-y-auto">
-        <div className="h-0.5 bg-gradient-to-r from-primary via-primary/50 to-transparent" />
-        <div className="w-full max-w-7xl mx-auto p-4 sm:p-8 md:p-10">
-          <Outlet />
-        </div>
-      </main>
+      {/* ── 3. Conteúdo Principal da Tela (Deslocado com pl-16 / pl-20 fixo sem espremer) ── */}
+      <div className="flex-1 w-full h-[100dvh] flex flex-col pl-16 sm:pl-20 overflow-hidden">
+        {/* Top Bar Superior */}
+        <header className="w-full bg-card/80 backdrop-blur-xl border-b border-border/50 px-4 sm:px-8 py-3.5 flex items-center justify-between z-30 shrink-0 shadow-xs">
+          {/* Identificação da Tela Atual */}
+          <div className="flex items-center gap-2.5 text-foreground font-display font-bold text-base sm:text-lg">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <IconePagina size={18} className="stroke-[2.5]" />
+            </div>
+            <span>{tituloPagina}</span>
+          </div>
 
-      {/* ── 5. Modal de Novo Agendamento ── */}
+          {/* Lado Direito: Ação Rápida + Identificação da Clínica */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setModalAberto(true)}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+            >
+              <Plus size={14} className="stroke-[3]" />
+              <span>Novo Agendamento</span>
+            </button>
+
+            <div className="flex items-center gap-2.5 pl-2 sm:border-l sm:border-border/60">
+              {isLoading ? (
+                <Loader2 size={18} className="animate-spin text-primary" />
+              ) : profissional?.logoUrl ? (
+                <img
+                  src={profissional.logoUrl}
+                  alt={nomeClinica}
+                  className="w-8 h-8 rounded-lg object-contain bg-secondary/60 p-0.5 border border-border/40 shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                  <CalendarCheck size={16} />
+                </div>
+              )}
+              <div className="text-left hidden md:block">
+                <p className="font-display font-bold text-xs text-foreground leading-tight truncate max-w-[160px]">
+                  {nomeClinica}
+                </p>
+                <p className="text-[10px] font-body text-muted-foreground truncate max-w-[160px]">
+                  {profissao || "Painel"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Área Útil de Trabalho (100% da largura útil sem espremer ou redimensionar) */}
+        <main className="flex-1 w-full overflow-y-auto">
+          <div className="h-0.5 bg-gradient-to-r from-primary via-primary/50 to-transparent" />
+          <div className="w-full max-w-7xl mx-auto p-4 sm:p-8 md:p-10">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {/* ── 4. Modal de Novo Agendamento ── */}
       <ModalNovoAgendamento
         aberto={modalAberto}
         onFechar={() => setModalAberto(false)}
