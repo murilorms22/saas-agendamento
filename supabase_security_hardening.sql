@@ -4,7 +4,18 @@
 -- ==============================================================================
 
 -- ------------------------------------------------------------------------------
--- 1. ATIVAÇÃO DE ROW LEVEL SECURITY (RLS) EM TODAS AS TABELAS SENSÍVEIS
+-- 1. ATUALIZAÇÃO DO SCHEMA (COLUNAS DE PERFIL DA EMPRESA)
+-- ------------------------------------------------------------------------------
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS nome_negocio TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS especialidade TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS profissao TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS tagline TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS disponibilidade JSONB;
+
+-- ------------------------------------------------------------------------------
+-- 2. ATIVAÇÃO DE ROW LEVEL SECURITY (RLS) EM TODAS AS TABELAS SENSÍVEIS
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.servicos ENABLE ROW LEVEL SECURITY;

@@ -69,6 +69,8 @@ function ConfiguracoesConteudo() {
   const [logoUrl, setLogoUrl] = useState(profissional.logoUrl || "");
   const [nomeNegocio, setNomeNegocio] = useState(profissional.nomeClinica || "");
   const [especialidade, setEspecialidade] = useState(profissional.profissao || "");
+  const [tagline, setTagline] = useState(profissional.tagline || "");
+  const [descricao, setDescricao] = useState(profissional.descricao || "");
 
   // Estados de controle e feedback
   const [salvando, setSalvando] = useState(false);
@@ -96,6 +98,8 @@ function ConfiguracoesConteudo() {
       if (profissional.logoUrl) setLogoUrl(profissional.logoUrl);
       if (profissional.nomeClinica) setNomeNegocio(profissional.nomeClinica);
       if (profissional.profissao) setEspecialidade(profissional.profissao);
+      if (profissional.tagline) setTagline(profissional.tagline);
+      if (profissional.descricao) setDescricao(profissional.descricao);
     }
   }, [profissional]);
 
@@ -199,6 +203,19 @@ function ConfiguracoesConteudo() {
 
     setSalvando(true);
     try {
+      const dispAtual = profissional.disponibilidade || {};
+      const novoDisp = {
+        ...dispAtual,
+        perfil: {
+          ...(dispAtual.perfil || {}),
+          nome: nomeNegocio.trim() || profissional.nomeClinica,
+          especialidade: especialidade.trim() || profissional.profissao,
+          profissao: especialidade.trim() || profissional.profissao,
+          tagline: tagline.trim() || profissional.tagline,
+          descricao: descricao.trim() || profissional.descricao,
+        },
+      };
+
       // 🛡️ Trava dupla estrita exigida pelo Red Team: .eq('id', profissional.id).eq('user_id', user.id)
       const { error: updateError } = await supabase
         .from("empresas")
@@ -207,21 +224,22 @@ function ConfiguracoesConteudo() {
           logo_url: logoUrlLimpa || null,
           nome_negocio: nomeNegocio.trim() || profissional.nomeClinica,
           especialidade: especialidade.trim() || profissional.profissao,
+          disponibilidade: novoDisp,
         })
         .eq("id", profissional.id)
         .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
 
       if (updateError) {
         console.error("[Configurações] Erro ao atualizar empresa:", updateError);
-        // Se a coluna logo_url ainda não existir no banco, informa o usuário amigavelmente
-        if (updateError.message.includes("column empresas.logo_url does not exist")) {
-          // Salva apenas a cor e dados textuais
+        // Se a coluna logo_url ainda não existir no banco, tenta salvar apenas o essencial
+        if (updateError.message.includes("column")) {
           const { error: fallbackError } = await supabase
             .from("empresas")
             .update({
               cor_primaria: hexNormalizado,
               nome_negocio: nomeNegocio.trim() || profissional.nomeClinica,
               especialidade: especialidade.trim() || profissional.profissao,
+              disponibilidade: novoDisp,
             })
             .eq("id", profissional.id)
             .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
@@ -230,10 +248,7 @@ function ConfiguracoesConteudo() {
             console.error("[Configurações] Falha no fallback:", fallbackError);
             exibirToast("Não foi possível salvar as configurações. Tente novamente.", "error");
           } else {
-            exibirToast(
-              "Cor salva! Nota: adicione a coluna 'logo_url' na tabela empresas no Supabase para persistir a logo.",
-              "warning"
-            );
+            exibirToast("Configurações do perfil salvas com sucesso!", "success");
             refetch();
           }
           return;
@@ -247,7 +262,7 @@ function ConfiguracoesConteudo() {
         return;
       }
 
-      exibirToast("Personalização visual salva com sucesso!", "success");
+      exibirToast("Configurações do perfil salvas com sucesso!", "success");
       // Atualiza a store global para refletir em toda a aplicação imediatamente
       refetch();
     } catch (err: any) {
@@ -321,13 +336,13 @@ function ConfiguracoesConteudo() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Nome do Negócio
+                  Nome do Negócio / Clínica
                 </label>
                 <input
                   type="text"
                   value={nomeNegocio}
                   onChange={(e) => setNomeNegocio(e.target.value)}
-                  placeholder="Ex: Fisio Prime Studio"
+                  placeholder="Ex: Fisio Prime Studio ou Dra. Ana"
                   className="w-full px-4 py-2.5 rounded-xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                 />
               </div>
@@ -340,10 +355,36 @@ function ConfiguracoesConteudo() {
                   type="text"
                   value={especialidade}
                   onChange={(e) => setEspecialidade(e.target.value)}
-                  placeholder="Ex: Fisioterapeuta & Pilates"
+                  placeholder="Ex: Fisioterapeuta, Desenvolvedor, Psicólogo..."
                   className="w-full px-4 py-2.5 rounded-xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Subtítulo / Slogan de Destaque
+              </label>
+              <input
+                type="text"
+                value={tagline}
+                onChange={(e) => setTagline(e.target.value)}
+                placeholder="Ex: Agende seu horário com facilidade e rapidez"
+                className="w-full px-4 py-2.5 rounded-xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+              />
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Descrição do Perfil / Apresentação
+              </label>
+              <textarea
+                rows={2}
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Ex: Atendimento personalizado com excelência e hora marcada."
+                className="w-full px-4 py-2.5 rounded-xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all resize-none"
+              />
             </div>
           </div>
 
@@ -604,10 +645,10 @@ function ConfiguracoesConteudo() {
                   </div>
 
                   <h3 className="font-display font-extrabold text-lg text-white leading-tight">
-                    Agende sua consulta online
+                    {tagline || "Agende sua consulta online"}
                   </h3>
                   <p className="font-body text-xs text-white/80 line-clamp-2">
-                    Escolha o melhor dia e horário para o seu atendimento com total comodidade.
+                    {descricao || "Escolha o melhor dia e horário para o seu atendimento com total comodidade."}
                   </p>
                 </div>
               </div>

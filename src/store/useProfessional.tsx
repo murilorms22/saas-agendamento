@@ -199,12 +199,19 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
     } catch (e) {}
   }
 
+  const perfil = disp?.perfil || {};
+
   return {
     id: String(row.id),
-    nomeClinica: row.nome_negocio ?? row.nome ?? "Minha Clínica",
-    profissao: row.profissao ?? "Atendimento Profissional",
-    tagline: row.tagline ?? "Agende seu horário com facilidade",
-    descricao: row.descricao ?? "Atendimento personalizado com hora marcada.",
+    nomeClinica: row.nome_negocio ?? row.nome ?? perfil.nome ?? "Minha Clínica",
+    profissao:
+      row.especialidade ??
+      row.profissao ??
+      perfil.especialidade ??
+      perfil.profissao ??
+      "Atendimento Profissional",
+    tagline: row.tagline ?? perfil.tagline ?? "Agende seu horário com facilidade",
+    descricao: row.descricao ?? perfil.descricao ?? "Atendimento personalizado com hora marcada.",
     stats,
     servicos,
     horariosDisponiveis: calcularHorariosDisponiveis(disp),

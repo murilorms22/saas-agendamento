@@ -143,53 +143,64 @@ export default function AdminLayout() {
         }`}
         aria-label="Menu de Navegação Lateral"
       >
-        {/* Cabeçalho da Sidebar: O Chevron permanece no MESMO local fixo tanto aberta quanto fechada */}
-        <div className="h-16 border-b border-border/40 px-3 sm:px-3.5 flex items-center bg-card/80 transition-all duration-300">
-          {/* Botão Chevron: Posição FIXA inalterada tanto aberta quanto fechada */}
-          <button
-            type="button"
-            onClick={() => setSidebarAberta((prev) => !prev)}
-            className="w-10 h-10 rounded-xl bg-secondary/80 hover:bg-primary/15 text-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs border border-border/60 group"
-            title={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
-            aria-label={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
-          >
-            <ChevronRight
-              size={18}
-              className={`stroke-[2.5] transition-transform duration-300 ease-in-out ${
-                sidebarAberta ? "rotate-180 text-primary" : "rotate-0 text-muted-foreground group-hover:text-primary"
-              }`}
-            />
-          </button>
-
-          {/* Logo / Nome da Clínica: Aparece suavemente ao lado do Chevron quando expandida */}
-          {sidebarAberta && (
+        {/* Cabeçalho da Sidebar */}
+        <div className="h-16 border-b border-border/40 px-3 sm:px-4 flex items-center justify-between bg-card/80 transition-all duration-300">
+          {!sidebarAberta ? (
+            /* Modo Retraído: Botão do Chevron centralizado para expandir */
+            <div className="w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => setSidebarAberta(true)}
+                className="w-10 h-10 rounded-xl bg-secondary/80 hover:bg-primary/15 text-muted-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer shadow-xs border border-border/60 group"
+                title="Expandir menu lateral"
+                aria-label="Expandir menu lateral"
+              >
+                <ChevronRight size={18} className="stroke-[2.5] group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
+          ) : (
+            /* Modo Expandido: Logo + Nome do Profissional à esquerda e Seta de Fechar à DIREITA */
             <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               transition={{ duration: 0.2 }}
-              className="flex items-center gap-2.5 min-w-0 pl-3 flex-1 overflow-hidden"
+              className="w-full flex items-center justify-between gap-2.5 min-w-0"
             >
-              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden">
-                {isLoading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : profissional?.logoUrl ? (
-                  <img
-                    src={profissional.logoUrl}
-                    alt={nomeClinica}
-                    className="w-full h-full object-contain p-0.5"
-                  />
-                ) : (
-                  <CalendarCheck size={16} />
-                )}
+              {/* Logo + Nome da Clínica e Profissão */}
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden">
+                  {isLoading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : profissional?.logoUrl ? (
+                    <img
+                      src={profissional.logoUrl}
+                      alt={nomeClinica}
+                      className="w-full h-full object-contain p-0.5"
+                    />
+                  ) : (
+                    <CalendarCheck size={18} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-display font-bold text-xs tracking-tight text-foreground leading-tight truncate">
+                    {nomeClinica}
+                  </h2>
+                  <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider truncate">
+                    {profissao || "Painel"}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="font-display font-bold text-xs tracking-tight text-foreground leading-tight truncate">
-                  {nomeClinica}
-                </h2>
-                <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider truncate">
-                  {profissao || "Painel"}
-                </p>
-              </div>
+
+              {/* Seta para fechar posicionada à direita */}
+              <button
+                type="button"
+                onClick={() => setSidebarAberta(false)}
+                className="w-8 h-8 rounded-xl bg-secondary/80 hover:bg-primary/15 text-muted-foreground hover:text-primary flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs border border-border/60"
+                title="Recolher menu lateral"
+                aria-label="Recolher menu lateral"
+              >
+                <ChevronRight size={16} className="rotate-180 stroke-[2.5]" />
+              </button>
             </motion.div>
           )}
         </div>
