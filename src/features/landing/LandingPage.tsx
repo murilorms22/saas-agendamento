@@ -37,6 +37,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useProfessional, type Servico } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
@@ -136,9 +137,20 @@ function sanitizarTelefone(valor: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function FluxoAgendamentoConteudo() {
+  const { slug } = useParams<{ slug?: string }>();
+  const [searchParams] = useSearchParams();
   const { profissional: profissionalNullable } = useProfessional();
   const profissional = profissionalNullable!; // seguro: PageLoader garante não-null
   const { user, signInWithGoogle, signOut } = useAuth();
+
+  const slugAtivo = slug || searchParams.get("slug") || profissional.slug;
+
+  // Atualiza o título da aba com o nome da clínica
+  useEffect(() => {
+    if (profissional?.nomeClinica) {
+      document.title = `${profissional.nomeClinica} | Agendamento Online`;
+    }
+  }, [profissional?.nomeClinica, slugAtivo]);
 
   // ── Estados do Stepper ──
   const [passoAtual, setPassoAtual] = useState<EtapaFluxo>(1);

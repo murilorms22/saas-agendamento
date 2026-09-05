@@ -17,13 +17,7 @@ function App() {
       <AuthProvider>
         <ProfessionalProvider>
           <Routes>
-            {/* Área Pública — Tela de Agendamento do Cliente */}
-            <Route path="/" element={<RootLayout />}>
-              <Route index element={<LandingPage />} />
-              <Route path=":slug" element={<LandingPage />} />
-            </Route>
-
-            {/* Autenticação do Profissional */}
+            {/* 1️⃣ Rotas Estáticas do Sistema (Precedência Estrita) */}
             <Route path="/login" element={<LoginPage />} />
 
             {/* Painel do Profissional (Protegido com AuthGuard) */}
@@ -40,6 +34,15 @@ function App() {
               <Route path="agenda" element={<AgendaProfissional />} />
               <Route path="configuracoes" element={<Configuracoes />} />
             </Route>
+
+            {/* 2️⃣ Rotas Públicas de Agendamento (Raiz e Slugs Dinâmicos) */}
+            <Route path="/" element={<RootLayout />}>
+              <Route index element={<LandingPage />} />
+              <Route path=":slug" element={<LandingPage />} />
+            </Route>
+
+            {/* 3️⃣ Rota Fallback */}
+            <Route path="*" element={<LandingPage />} />
           </Routes>
         </ProfessionalProvider>
       </AuthProvider>

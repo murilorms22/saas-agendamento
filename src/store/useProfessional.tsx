@@ -22,6 +22,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
+import { isReservedSlug } from "../constants/reservedSlugs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos públicos (consumidos pelos componentes)
@@ -297,7 +298,7 @@ export function ProfessionalProvider({
       if (!isAdminRoute && profissional) {
         const pathSegments = location.pathname.split("/").filter(Boolean);
         const slugFromPath =
-          pathSegments.length === 1 && !["admin", "login"].includes(pathSegments[0])
+          pathSegments.length >= 1 && !isReservedSlug(pathSegments[0])
             ? pathSegments[0]
             : null;
         const searchParams = new URLSearchParams(location.search);
@@ -355,10 +356,13 @@ export function ProfessionalProvider({
         } else {
           // 🌐 ROTA PÚBLICA (Landing Page): Busca pelo slug da URL (/:slug), query param (?slug=) ou prop
           const pathSegments = location.pathname.split("/").filter(Boolean);
-          const slugFromPath =
-            pathSegments.length === 1 && !["admin", "login"].includes(pathSegments[0])
-              ? pathSegments[0]
-              : null;
+          const rawSlug = pathSegments.length >= 1 ? pathSegments[0] : null;
+
+          if (rawSlug && isReservedSlug(rawSlug)) {
+            throw new Error(`NOT_FOUND: O endereço "/${rawSlug}" é uma palavra reservada do sistema.`);
+          }
+
+          const slugFromPath = rawSlug;
           const searchParams = new URLSearchParams(location.search);
           const slugAlvo = slugFromPath || searchParams.get("slug") || slugProp || "studio-fisio";
 
@@ -369,7 +373,9 @@ export function ProfessionalProvider({
             .maybeSingle();
 
           if (empresaError) throw new Error(empresaError.message);
-          if (!data) throw new Error(`Empresa com slug "${slugAlvo}" não encontrada.`);
+          if (!data) {
+            throw new Error(`NOT_FOUND: Não encontramos nenhum profissional ou clínica no endereço "/${slugAlvo}".`);
+          }
 
           empresaData = data;
         }
