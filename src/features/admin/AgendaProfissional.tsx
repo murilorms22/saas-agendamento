@@ -40,7 +40,7 @@ import {
   ArrowRight,
   Pencil,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
@@ -386,6 +386,36 @@ function VisualizadorAgenda({
   const [modo, setModo] = useState<ModoVisualizacao>("semana");
   const [dataRef, setDataRef] = useState<Date>(hoje);
   const [diaSelecionado, setDiaSelecionado] = useState<Date>(hoje);
+  const [direcao, setDirecao] = useState<1 | -1 | 0>(0);
+
+  // Variantes de transição suave com interpolação direcional (slide + fade suave)
+  const variantesTransicao: Variants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 36 : direction < 0 ? -36 : 0,
+      opacity: 0,
+      scale: 0.985,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+      scale: 1,
+      transition: {
+        x: { type: "spring" as const, stiffness: 320, damping: 28 },
+        opacity: { duration: 0.22, ease: "easeOut" },
+        scale: { duration: 0.22, ease: "easeOut" },
+      },
+    },
+    exit: (direction: number) => ({
+      x: direction > 0 ? -36 : direction < 0 ? 36 : 0,
+      opacity: 0,
+      scale: 0.985,
+      transition: {
+        x: { type: "spring" as const, stiffness: 320, damping: 28 },
+        opacity: { duration: 0.16, ease: "easeIn" },
+        scale: { duration: 0.16, ease: "easeIn" },
+      },
+    }),
+  };
 
   // Estado do Modal de Detalhes
   const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<AgendamentoSemana | null>(null);
@@ -480,8 +510,9 @@ function VisualizadorAgenda({
   // Agendamentos do dia selecionado (para o modo dia e o painel de detalhes no modo mês)
   const agsDoDiaSelecionado = agsPorData(diaSelecionado);
 
-  // ── Navegação (Avança/Recua 1 dia no modo semana e modo dia) ──
+  // ── Navegação (Avança/Recua 1 dia no modo semana e modo dia com transição fluida) ──
   const navegarAnterior = () => {
+    setDirecao(-1);
     if (modo === "dia") {
       const d = subDays(diaSelecionado, 1);
       setDataRef(d);
@@ -494,6 +525,7 @@ function VisualizadorAgenda({
   };
 
   const navegarProximo = () => {
+    setDirecao(1);
     if (modo === "dia") {
       const d = addDays(diaSelecionado, 1);
       setDataRef(d);
@@ -506,11 +538,13 @@ function VisualizadorAgenda({
   };
 
   const irParaHoje = () => {
+    setDirecao(0);
     setDataRef(hoje);
     setDiaSelecionado(hoje);
   };
 
   const abrirDiaNaSemana = (dia: Date) => {
+    setDirecao(0);
     setDataRef(dia);
     setDiaSelecionado(dia);
     setModo("semana");
@@ -570,7 +604,7 @@ function VisualizadorAgenda({
               <h2 className="text-xl font-display font-bold text-foreground capitalize flex items-center gap-2">
                 <Clock size={20} className="text-primary" />
                 {format(diaSelecionado, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-              </h2>
+      </h2>
               <div className="flex items-center gap-3 text-xs font-body text-muted-foreground mt-1">
                 <span><strong>{agsDoDiaSelecionado.length}</strong> consulta(s) hoje</span>
                 <span>•</span>
@@ -616,7 +650,10 @@ function VisualizadorAgenda({
             <motion.button
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => setModo("dia")}
+              onClick={() => {
+                setDirecao(0);
+                setModo("dia");
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "dia"
                   ? "bg-card text-primary shadow-sm border border-border/40"
@@ -629,7 +666,10 @@ function VisualizadorAgenda({
             <motion.button
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => setModo("semana")}
+              onClick={() => {
+                setDirecao(0);
+                setModo("semana");
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "semana"
                   ? "bg-card text-primary shadow-sm border border-border/40"
@@ -642,7 +682,10 @@ function VisualizadorAgenda({
             <motion.button
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => setModo("mes")}
+              onClick={() => {
+                setDirecao(0);
+                setModo("mes");
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "mes"
                   ? "bg-card text-primary shadow-sm border border-border/40"
@@ -686,23 +729,27 @@ function VisualizadorAgenda({
         </div>
       </div>
 
-      {/* ── Conteúdo Conforme o Modo Ativo ── */}
-      <AnimatePresence mode="wait">
+      {/* ── Conteúdo Conforme o Modo Ativo (com animação direcional fluida) ── */}
+      <AnimatePresence mode="wait" custom={direcao}>
         {modo === "dia" ? (
           /* ── VISÃO DIÁRIA DETALHADA (Hora por Hora) ── */
           <motion.div
-            key={`visao-dia-${diaSelecionado.toISOString()}`}
-            initial={{ opacity: 0, scale: 0.98, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -10 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            key={`visao-dia-${format(diaSelecionado, "yyyy-MM-dd")}`}
+            custom={direcao}
+            variants={variantesTransicao}
+            initial="enter"
+            animate="center"
+            exit="exit"
             className="space-y-4"
           >
             {/* Barra de Ações Rápidas do Dia */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card/80 p-4 rounded-2xl border border-border/30 shadow-soft">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setModo("semana")}
+                  onClick={() => {
+                    setDirecao(0);
+                    setModo("semana");
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-body font-bold transition-all hover:-translate-x-0.5 cursor-pointer shadow-sm"
                 >
                   <ChevronLeft size={14} />
@@ -741,36 +788,42 @@ function VisualizadorAgenda({
                     className="flex flex-col sm:flex-row items-start sm:items-stretch group/linha hover:bg-secondary/15 transition-colors"
                   >
                     {/* Indicador de Horário */}
-                    <div className="w-full sm:w-28 p-3 sm:p-4 shrink-0 flex sm:flex-col items-center sm:items-start justify-between border-b sm:border-b-0 sm:border-r border-border/20 bg-secondary/10">
-                      <span className="font-display font-extrabold text-sm sm:text-base text-foreground tracking-tight flex items-center gap-1">
-                        <Clock size={13} className="text-primary/70" />
+                    <div className="w-full sm:w-28 p-3 sm:p-4 bg-secondary/20 sm:border-r border-border/20 flex sm:flex-col items-center sm:items-start justify-between sm:justify-center shrink-0">
+                      <span className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+                        <Clock size={14} className="text-primary" />
                         {hora}
                       </span>
-                      <span className="font-body text-[10px] font-semibold text-muted-foreground/60">
-                        {agsNestaHora.length > 0
-                          ? `${agsNestaHora.length} consulta(s)`
-                          : "Horário livre"}
+                      <span className="text-[10px] font-body text-muted-foreground">
+                        {agsNestaHora.length === 0
+                          ? "Livre"
+                          : `${agsNestaHora.length} consulta${agsNestaHora.length > 1 ? "s" : ""}`}
                       </span>
                     </div>
 
-                    {/* Espaço das Consultas / Slot Livre */}
+                    {/* Conteúdo do Horário */}
                     <div className="flex-1 p-3 sm:p-4 w-full">
                       {agsNestaHora.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <div className="space-y-2">
                           <AnimatePresence mode="popLayout">
                             {agsNestaHora.map((ag) => {
-                              const isExcluindo = excluindoId === ag.id;
+                              const fundos: Record<StatusAgendamento, string> = {
+                                Confirmado: "bg-blue-500/10 border-blue-500/25",
+                                Pendente: "bg-primary/10 border-primary/25",
+                                Finalizado: "bg-emerald-500/10 border-emerald-500/25",
+                                Cancelado: "bg-rose-500/10 border-rose-500/25 opacity-60",
+                              };
+
                               return (
                                 <motion.div
-                                  key={ag.id}
                                   layout
+                                  key={ag.id}
                                   id={`card-agendamento-${ag.id}`}
                                   animate={
-                                    isExcluindo
+                                    excluindoId === ag.id
                                       ? {
-                                          scale: [1, 1.06, 0.85, 0],
-                                          opacity: [1, 1, 0.4, 0],
-                                          filter: ["blur(0px)", "blur(1px)", "blur(6px)", "blur(12px)"],
+                                          scale: [1, 1.05, 0.85, 0],
+                                          opacity: [1, 1, 0.3, 0],
+                                          filter: ["blur(0px)", "blur(2px)", "blur(8px)", "blur(14px)"],
                                           transition: { duration: 0.5, ease: "easeInOut" },
                                         }
                                       : { opacity: 1, scale: 1, filter: "blur(0px)" }
@@ -787,39 +840,25 @@ function VisualizadorAgenda({
                                   transition={{
                                     layout: { type: "spring", stiffness: 350, damping: 26 },
                                   }}
-                                  className={`p-4 rounded-2xl border-l-4 border transition-colors bg-background/90 shadow-sm flex flex-col justify-between gap-3 relative overflow-visible ${
-                                    ag.status === "Confirmado"
-                                      ? "border-l-emerald-500 border-border/30 shadow-emerald-500/5"
-                                      : ag.status === "Cancelado"
-                                      ? "border-l-rose-500 border-border/20 opacity-60 grayscale-[30%]"
-                                      : "border-l-primary border-border/30 shadow-primary/5"
+                                  className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs relative overflow-visible ${
+                                    fundos[ag.status as StatusAgendamento]
                                   }`}
                                 >
-                                  {isExcluindo && <EfeitoPuffFumaca />}
-                                  <div
-                                    onClick={() => !isExcluindo && setAgendamentoDetalhes(ag)}
-                                    className="flex items-start justify-between gap-3 cursor-pointer group/header"
-                                    title="Clique para ver detalhes completos e editar"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-display font-extrabold text-sm shrink-0 shadow-inner group-hover/header:scale-105 transition-transform">
-                                        {ag.nomeCliente.charAt(0).toUpperCase()}
-                                      </div>
-                                      <div>
-                                        <h4 className="font-display font-bold text-base text-foreground leading-snug group-hover/header:text-primary group-hover/header:underline transition-colors">
-                                          {ag.nomeCliente}
-                                        </h4>
-                                        <p className="font-body text-xs font-semibold text-primary mt-0.5">
-                                          {ag.servico}
-                                        </p>
-                                      </div>
+                                  {excluindoId === ag.id && <EfeitoPuffFumaca />}
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-display font-bold text-sm text-foreground">
+                                        {ag.nomeCliente}
+                                      </span>
+                                      <BadgeStatus status={ag.status} />
                                     </div>
+                                    <p className="text-xs font-body text-muted-foreground flex items-center gap-2">
+                                      <span>{ag.servico}</span>
+                                    </p>
                                   </div>
 
-                                  {/* Ações Rápidas de Edição e Cancelamento + Horário e Status à direita */}
-                                  <div className="flex items-center justify-between pt-2.5 border-t border-border/20 gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <button
+                                  <div className="flex items-center gap-2 self-end sm:self-center">
+                                    <button
                                         type="button"
                                         onClick={() => handleEditarAgendamento(ag)}
                                         className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
@@ -828,31 +867,6 @@ function VisualizadorAgenda({
                                         <Pencil size={12} />
                                         <span>Editar</span>
                                       </button>
-                                      {ag.status !== "Confirmado" && (
-                                        <button
-                                          onClick={() => onAtualizarStatus?.(ag.id, "Confirmado")}
-                                          className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                                        >
-                                          <CheckCircle2 size={12} /> Confirmar
-                                        </button>
-                                      )}
-                                      <button
-                                        onClick={() => setAgendamentoDetalhes(ag)}
-                                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                                        title="Cancelar consulta"
-                                      >
-                                        <Trash2 size={12} /> Cancelar
-                                      </button>
-                                    </div>
-
-                                    {/* Em baixo na direita, ao lado do horário */}
-                                    <div className="flex items-center gap-1.5 ml-auto">
-                                      <span className="px-2.5 py-1 rounded-lg bg-secondary font-body font-bold text-xs text-foreground flex items-center gap-1 shadow-sm">
-                                        <Clock size={11} className="text-primary" />
-                                        {ag.horario}
-                                      </span>
-                                      <BadgeStatus status={ag.status} />
-                                    </div>
                                   </div>
                                 </motion.div>
                               );
@@ -880,13 +894,14 @@ function VisualizadorAgenda({
             </div>
           </motion.div>
         ) : modo === "semana" ? (
-          /* ── VISÃO SEMANAL (5 Colunas) ── */
+          /* ── VISÃO SEMANAL (5 Colunas com Transição Fluida) ── */
           <motion.div
-            key="visao-semana"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
+            key={`visao-semana-${format(semana[0], "yyyy-MM-dd")}`}
+            custom={direcao}
+            variants={variantesTransicao}
+            initial="enter"
+            animate="center"
+            exit="exit"
             className="space-y-4"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -960,13 +975,14 @@ function VisualizadorAgenda({
             </div>
           </motion.div>
         ) : (
-          /* ── VISÃO MENSAL EXPANDIDA (Grade Completa) ── */
+          /* ── VISÃO MENSAL EXPANDIDA (Grade Completa com Transição Fluida) ── */
           <motion.div
-            key="visao-mes"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
+            key={`visao-mes-${format(dataRef, "yyyy-MM")}`}
+            custom={direcao}
+            variants={variantesTransicao}
+            initial="enter"
+            animate="center"
+            exit="exit"
             className="space-y-6"
           >
             <div className="bg-card rounded-3xl border border-border/40 p-4 md:p-6 shadow-floating">
