@@ -166,15 +166,19 @@ function PainelInicialConteudo() {
   const nomeProfissional = profissional?.nomeClinica ?? "Profissional";
   const saudacao = obterSaudacao(nomeProfissional);
 
-  // Link da página pública do profissional
+  // Link da página pública do profissional com slug dinâmico
   const urlPublica = typeof window !== "undefined"
-    ? `${window.location.origin}/`
-    : "http://localhost:5173/";
+    ? `${window.location.origin}/${profissional?.slug || "studio-fisio"}`
+    : `http://localhost:5173/${profissional?.slug || "studio-fisio"}`;
 
   const handleCopiarLink = () => {
-    navigator.clipboard.writeText(urlPublica);
-    setLinkCopiado(true);
-    setTimeout(() => setLinkCopiado(false), 2500);
+    try {
+      navigator.clipboard.writeText(urlPublica);
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2500);
+    } catch (err) {
+      console.error("Erro ao copiar link público:", err);
+    }
   };
 
   const handleCriarAgendamento = async (novo: AgendamentoItem) => {

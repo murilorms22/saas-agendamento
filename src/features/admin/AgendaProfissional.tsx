@@ -18,8 +18,6 @@ import {
   isSameMonth,
   isSameDay,
   parseISO,
-  addWeeks,
-  subWeeks,
   addMonths,
   subMonths,
 } from "date-fns";
@@ -98,12 +96,8 @@ const DIAS: { chave: DiaSemana; label: string }[] = [
 // Helpers
 // ──────────────────────────────────────────────────────────────
 
-function gerarSemana(inicio: Date): Date[] {
-  return Array.from({ length: 7 }, (_, i) => addDays(inicio, i));
-}
-
-function inicioSemana(data: Date): Date {
-  return startOfWeek(data, { locale: ptBR });
+function gerarSemana(inicio: Date, qtdDias = 5): Date[] {
+  return Array.from({ length: qtdDias }, (_, i) => addDays(inicio, i));
 }
 
 function gerarDiasDoMes(mesAtual: Date): Date[] {
@@ -468,8 +462,7 @@ function VisualizadorAgenda({
   };
 
   // ── Helpers de data ──────────────────────────────────────────
-  const semanaBase = inicioSemana(dataRef);
-  const semana = gerarSemana(semanaBase);
+  const semana = gerarSemana(dataRef, 5);
   const diasDoMes = gerarDiasDoMes(dataRef);
 
   const agsPorData = (data: Date) =>
@@ -487,14 +480,14 @@ function VisualizadorAgenda({
   // Agendamentos do dia selecionado (para o modo dia e o painel de detalhes no modo mês)
   const agsDoDiaSelecionado = agsPorData(diaSelecionado);
 
-  // ── Navegação ────────────────────────────────────────────────
+  // ── Navegação (Avança/Recua 1 dia no modo semana e modo dia) ──
   const navegarAnterior = () => {
     if (modo === "dia") {
       const d = subDays(diaSelecionado, 1);
       setDataRef(d);
       setDiaSelecionado(d);
     } else if (modo === "semana") {
-      setDataRef((d) => subWeeks(d, 1));
+      setDataRef((d) => subDays(d, 1));
     } else {
       setDataRef((d) => subMonths(d, 1));
     }
@@ -506,7 +499,7 @@ function VisualizadorAgenda({
       setDataRef(d);
       setDiaSelecionado(d);
     } else if (modo === "semana") {
-      setDataRef((d) => addWeeks(d, 1));
+      setDataRef((d) => addDays(d, 1));
     } else {
       setDataRef((d) => addMonths(d, 1));
     }
@@ -593,11 +586,11 @@ function VisualizadorAgenda({
           ) : modo === "semana" ? (
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">
-                Semana de {format(semana[0], "dd 'de' MMMM", { locale: ptBR })}
-                {" "}a {format(semana[6], "dd 'de' MMMM", { locale: ptBR })}
+                {format(semana[0], "dd 'de' MMMM", { locale: ptBR })}
+                {" "}a {format(semana[semana.length - 1], "dd 'de' MMMM", { locale: ptBR })}
               </h2>
               <p className="text-xs font-body text-muted-foreground mt-0.5">
-                Clique no cabeçalho do dia para abrir a visão hora por hora detalhada
+                Exibindo 5 dias • Clique nas setas para navegar 1 dia por vez
               </p>
             </div>
           ) : (
@@ -887,7 +880,7 @@ function VisualizadorAgenda({
             </div>
           </motion.div>
         ) : modo === "semana" ? (
-          /* ── VISÃO SEMANAL (7 Colunas) ── */
+          /* ── VISÃO SEMANAL (5 Colunas) ── */
           <motion.div
             key="visao-semana"
             initial={{ opacity: 0, y: 6 }}
@@ -896,7 +889,7 @@ function VisualizadorAgenda({
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
               {semana.map((dia) => {
                 const ags = agsPorData(dia);
                 const ehHoje = isSameDay(dia, hoje);

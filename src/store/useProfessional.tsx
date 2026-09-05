@@ -141,36 +141,70 @@ function formatarPreco(valor: any): string {
   }).format(emReais);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapeadores: Row do banco → tipos do componente
-// ─────────────────────────────────────────────────────────────────────────────
+/** Extrai a duração em minutos de uma string ou número (ex: "50 min", "1h", 45) com fallback padrão */
+export function extrairMinutos(duracao: string | number | undefined | null, fallback = 60): number {
+  if (duracao === undefined || duracao === null) return fallback;
+  if (typeof duracao === "number") return duracao > 0 ? duracao : fallback;
 
-function calcularHorariosDisponiveis(disponibilidade: any): string[] {
+  const texto = String(duracao).trim().toLowerCase();
+  if (!texto) return fallback;
+
+  let total = 0;
+  const horasMatch = texto.match(/(\d+)\s*h/);
+  if (horasMatch) {
+    total += parseInt(horasMatch[1], 10) * 60;
+  }
+  const minMatch = texto.match(/(\d+)\s*min/);
+  if (minMatch) {
+    total += parseInt(minMatch[1], 10);
+  } else if (!horasMatch) {
+    const numPuro = parseInt(texto.replace(/\D/g, ""), 10);
+    if (!isNaN(numPuro) && numPuro > 0) {
+      total = numPuro;
+    }
+  }
+
+  return total > 0 ? total : fallback;
+}
+
+function calcularHorariosDisponiveis(disponibilidade: any, intervaloPadrao = 60): string[] {
   if (!disponibilidade?.horarios) {
     return ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
   }
+
+  const intervaloMinutos = extrairMinutos(
+    disponibilidade?.duracaoAtendimento || disponibilidade?.intervaloMinutos,
+    intervaloPadrao
+  );
 
   const setHorarios = new Set<string>();
   const dias = Object.values(disponibilidade.horarios) as any[];
 
   dias.forEach((d) => {
     if (!d.ativo || !d.inicio || !d.fim) return;
-    const [hIni] = d.inicio.split(":").map(Number);
-    const [hFim] = d.fim.split(":").map(Number);
+    const [hIni, mIni = 0] = d.inicio.split(":").map(Number);
+    const [hFim, mFim = 0] = d.fim.split(":").map(Number);
 
-    let hIntIni = -1;
-    let hIntFim = -1;
+    const minInicio = hIni * 60 + mIni;
+    const minFim = hFim * 60 + mFim;
+
+    let minIntIni = -1;
+    let minIntFim = -1;
     if (d.temIntervalo && d.intervaloInicio && d.intervaloFim) {
-      hIntIni = Number(d.intervaloInicio.split(":")[0]);
-      hIntFim = Number(d.intervaloFim.split(":")[0]);
+      const [hi, mi = 0] = d.intervaloInicio.split(":").map(Number);
+      const [hf, mf = 0] = d.intervaloFim.split(":").map(Number);
+      minIntIni = hi * 60 + mi;
+      minIntFim = hf * 60 + mf;
     }
 
-    for (let h = hIni; h < hFim; h++) {
-      // Se cair no intervalo do profissional, NÃO inclui!
-      if (d.temIntervalo && h >= hIntIni && h < hIntFim) {
+    for (let cur = minInicio; cur + intervaloMinutos <= minFim; cur += intervaloMinutos) {
+      // Se coincidir com o intervalo do profissional, pula
+      if (d.temIntervalo && cur >= minIntIni && cur < minIntFim) {
         continue;
       }
-      setHorarios.add(`${String(h).padStart(2, "0")}:00`);
+      const hh = Math.floor(cur / 60);
+      const mm = cur % 60;
+      setHorarios.add(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
     }
   });
 

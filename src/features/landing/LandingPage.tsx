@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useProfessional, type Servico } from "../../store/useProfessional";
+import { useProfessional, extrairMinutos, type Servico } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
@@ -435,7 +435,15 @@ function FluxoAgendamentoConteudo() {
       }
     }
 
-    // 2. Checa horários do dia da semana e remove intervalos
+    // 2. Extrai intervalo em minutos (prioriza o serviço escolhido, depois configuração da clínica, com fallback 60 min)
+    const intervaloMinutos = extrairMinutos(
+      servicoEscolhido?.duracao ||
+        profissional.disponibilidade?.duracaoAtendimento ||
+        profissional.disponibilidade?.intervaloMinutos,
+      60
+    );
+
+    // 3. Checa horários do dia da semana e remove intervalos
     const mapaDias: Array<"dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"> = [
       "dom",
       "seg",
@@ -453,23 +461,30 @@ function FluxoAgendamentoConteudo() {
         return { slots: [], bloqueado: true, motivo: "Sem atendimento neste dia da semana" };
       }
 
-      const [hIni] = (configDia.inicio || "08:00").split(":").map(Number);
-      const [hFim] = (configDia.fim || "18:00").split(":").map(Number);
+      const [hIni, mIni = 0] = (configDia.inicio || "08:00").split(":").map(Number);
+      const [hFim, mFim = 0] = (configDia.fim || "18:00").split(":").map(Number);
 
-      let hIntIni = -1;
-      let hIntFim = -1;
+      const minInicio = hIni * 60 + mIni;
+      const minFim = hFim * 60 + mFim;
+
+      let minIntIni = -1;
+      let minIntFim = -1;
       if (configDia.temIntervalo && configDia.intervaloInicio && configDia.intervaloFim) {
-        hIntIni = Number(configDia.intervaloInicio.split(":")[0]);
-        hIntFim = Number(configDia.intervaloFim.split(":")[0]);
+        const [hi, mi = 0] = configDia.intervaloInicio.split(":").map(Number);
+        const [hf, mf = 0] = configDia.intervaloFim.split(":").map(Number);
+        minIntIni = hi * 60 + mi;
+        minIntFim = hf * 60 + mf;
       }
 
       const slots: string[] = [];
-      for (let h = hIni; h < hFim; h++) {
+      for (let cur = minInicio; cur + intervaloMinutos <= minFim; cur += intervaloMinutos) {
         // Exclui os horários de almoço / intervalo configurados
-        if (configDia.temIntervalo && h >= hIntIni && h < hIntFim) {
+        if (configDia.temIntervalo && cur >= minIntIni && cur < minIntFim) {
           continue;
         }
-        slots.push(`${String(h).padStart(2, "0")}:00`);
+        const hh = Math.floor(cur / 60);
+        const mm = cur % 60;
+        slots.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
       }
 
       return { slots, bloqueado: false };
@@ -490,7 +505,7 @@ function FluxoAgendamentoConteudo() {
       ],
       bloqueado: false,
     };
-  }, [dataSelecionada, profissional.disponibilidade, profissional.horariosDisponiveis]);
+  }, [dataSelecionada, profissional.disponibilidade, profissional.horariosDisponiveis, servicoEscolhido?.duracao]);
 
   // ── Calendário: Helpers de Navegação ──
   const proximoMes = () => setMesAtual(addMonths(mesAtual, 1));
@@ -929,52 +944,52 @@ function FluxoAgendamentoConteudo() {
 
       {/* ── Container Card Central com Glassmorphism ── */}
       <div className="w-full max-w-4xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-[2.5rem] p-6 sm:p-10 shadow-floating flex flex-col transition-all">
-        {/* Se já foi finalizado com sucesso, exibe tela de celebração */}
+        {/* Se já foi finalizado com sucesso, exibe tela de celebração compacta (sem scroll vertical) */}
         {sucessoFinal ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="py-10 text-center space-y-6 max-w-md mx-auto"
+            className="py-2 sm:py-3 text-center space-y-3 max-w-sm sm:max-w-md mx-auto"
           >
-            <div className="w-20 h-20 rounded-full bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center ring-8 ring-emerald-500/10 shadow-soft">
-              <CheckCircle2 size={42} />
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center ring-4 ring-emerald-500/10 shadow-soft">
+              <CheckCircle2 size={32} />
             </div>
 
-            <div className="space-y-2">
-              <h2 className="text-3xl font-display font-extrabold text-foreground">
+            <div className="space-y-0.5">
+              <h2 className="text-xl sm:text-2xl font-display font-extrabold text-foreground tracking-tight">
                 Consulta Agendada!
               </h2>
-              <p className="text-sm font-body text-muted-foreground">
-                Seu agendamento foi registrado com sucesso. Aguardamos você no dia e horário escolhidos!
+              <p className="text-xs font-body text-muted-foreground">
+                Seu agendamento foi registrado com sucesso. Aguardamos você!
               </p>
             </div>
 
-            {/* Recibo Rápido do Sucesso */}
-            <div className="p-5 rounded-2xl bg-secondary/40 border border-border/60 text-left space-y-3 font-body text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground font-bold">Serviço:</span>
-                <span className="font-bold text-foreground">{servicoEscolhido?.nome}</span>
+            {/* Recibo Rápido do Sucesso Compacto */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-secondary/40 border border-border/60 text-left space-y-2 font-body text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">Serviço:</span>
+                <span className="font-bold text-foreground truncate max-w-[200px]">{servicoEscolhido?.nome}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground font-bold">Data & Horário:</span>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">Data & Horário:</span>
                 <span className="font-bold text-primary capitalize">
-                  {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
+                  {format(dataSelecionada, "dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground font-bold">Paciente:</span>
-                <span className="font-bold text-foreground">{clienteLogado?.nome}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">Paciente:</span>
+                <span className="font-bold text-foreground truncate max-w-[200px]">{clienteLogado?.nome}</span>
               </div>
             </div>
 
-            <div className="pt-4 flex flex-col sm:flex-row gap-3">
+            <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
               <button
                 type="button"
                 onClick={reiniciarFluxo}
-                className="flex-1 py-3.5 rounded-xl bg-secondary hover:bg-secondary/80 font-body font-bold text-xs text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-secondary hover:bg-secondary/80 font-body font-bold text-xs text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <RotateCcw size={15} />
-                Agendar Novo Horário
+                <RotateCcw size={14} />
+                <span>Agendar Outro</span>
               </button>
               <a
                 href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
@@ -987,10 +1002,10 @@ function FluxoAgendamentoConteudo() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2"
               >
-                <CalendarIcon size={15} />
-                Salvar no Google Agenda
+                <CalendarIcon size={14} />
+                <span>Google Agenda</span>
               </a>
             </div>
           </motion.div>
@@ -998,8 +1013,8 @@ function FluxoAgendamentoConteudo() {
           <>
 
             {/* ── Tipografia de Impacto da Etapa Atual ── */}
-            <div className="text-center mb-8 max-w-xl mx-auto space-y-2">
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-primary tracking-tight">
+            <div className="text-center pt-1 mb-6 sm:mb-8 max-w-xl mx-auto space-y-2">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-primary tracking-tight leading-tight">
                 {passoAtual === 1 && "Qual serviço você deseja agendar?"}
                 {passoAtual === 2 && "Escolha o melhor dia e horário"}
                 {passoAtual === 3 && "Como podemos te identificar?"}
@@ -1016,7 +1031,7 @@ function FluxoAgendamentoConteudo() {
             {/* ── Conteúdo da Etapa Atual com AnimatePresence ── */}
             <div className="flex-1">
               <AnimatePresence mode="wait">
-                {/* ── ETAPA 1: SERVIÇOS ── */}
+                {/* ── ETAPA 1: SERVIÇOS (Espaçamento Aumentado) ── */}
                 {passoAtual === 1 && (
                   <motion.div
                     key="passo-1"
@@ -1024,7 +1039,7 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 py-4 sm:py-6"
                   >
                     {profissional.servicos.map((servico) => {
                       const selecionado = servicoEscolhido?.id === servico.id;
@@ -1238,7 +1253,7 @@ function FluxoAgendamentoConteudo() {
                   </motion.div>
                 )}
 
-                {/* ── ETAPA 3: IDENTIFICAÇÃO / AUTENTICAÇÃO ── */}
+                {/* ── ETAPA 3: IDENTIFICAÇÃO / AUTENTICAÇÃO (Espaçamento Aumentado) ── */}
                 {passoAtual === 3 && (
                   <motion.div
                     key="passo-3"
@@ -1246,7 +1261,7 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="max-w-md mx-auto w-full space-y-6"
+                    className="max-w-md mx-auto w-full space-y-6 py-4 sm:py-6"
                   >
                     {/* Cenário A: Conta de Administrador detectada */}
                     {isContaGestor ? (
@@ -1280,7 +1295,7 @@ function FluxoAgendamentoConteudo() {
                       </div>
                     ) : clienteLogado ? (
                       /* Cenário B: Paciente reconhecido */
-                      <div className="p-6 rounded-3xl bg-background border border-border shadow-soft text-center space-y-4">
+                      <div className="p-6 sm:p-8 rounded-3xl bg-background border border-border shadow-soft text-center space-y-5">
                         <div className="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center font-display font-extrabold text-2xl shadow-inner">
                           {clienteLogado.nome.charAt(0).toUpperCase()}
                         </div>
@@ -1288,15 +1303,15 @@ function FluxoAgendamentoConteudo() {
                           <span className="text-[11px] font-body uppercase font-bold text-muted-foreground tracking-wider">
                             Paciente Reconhecido
                           </span>
-                          <h3 className="font-display font-extrabold text-xl text-foreground">
+                          <h3 className="font-display font-extrabold text-xl text-foreground mt-0.5">
                             {clienteLogado.nome}
                           </h3>
-                          <p className="font-body text-xs text-muted-foreground mt-0.5">
+                          <p className="font-body text-xs text-muted-foreground mt-1">
                             {clienteLogado.telefone ? mascararTelefone(clienteLogado.telefone) : clienteLogado.email}
                           </p>
                         </div>
 
-                        <div className="pt-2 border-t border-border/30 flex items-center justify-between gap-3">
+                        <div className="pt-3 border-t border-border/30 flex items-center justify-between gap-3">
                           <button
                             type="button"
                             onClick={handleTrocarConta}
@@ -1317,7 +1332,7 @@ function FluxoAgendamentoConteudo() {
                       </div>
                     ) : (
                       /* Cenário C: Formulário e Google OAuth Unificado */
-                      <div className="bg-background p-6 rounded-3xl border border-border shadow-soft space-y-5">
+                      <div className="bg-background p-6 sm:p-8 rounded-3xl border border-border shadow-soft space-y-6">
                         {/* Botão de Destaque Google OAuth (Cadastro e Login em 1 clique) */}
                         <motion.button
                           whileHover={iniciandoGoogle ? {} : { scale: 1.02, y: -1 }}
@@ -1531,7 +1546,7 @@ function FluxoAgendamentoConteudo() {
                   </motion.div>
                 )}
 
-                {/* ── ETAPA 4: CONFIRMAÇÃO & RECIBO ── */}
+                {/* ── ETAPA 4: CONFIRMAÇÃO & RECIBO (Espaçamento Superior Ajustado) ── */}
                 {passoAtual === 4 && (
                   <motion.div
                     key="passo-4"
@@ -1539,7 +1554,7 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="max-w-lg mx-auto w-full space-y-6"
+                    className="max-w-lg mx-auto w-full space-y-6 pt-3 sm:pt-5 pb-2"
                   >
                     {/* Card Recibo em Destaque */}
                     <div className="p-6 rounded-3xl bg-background border border-border/80 shadow-soft space-y-5">
