@@ -6,7 +6,8 @@
  *  2. Disponibilidade — configurar horários de atendimento e bloqueios
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import useEmblaCarousel from "embla-carousel-react";
 import {
   format,
   addDays,
@@ -95,10 +96,6 @@ const DIAS: { chave: DiaSemana; label: string }[] = [
 // ──────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────
-
-function gerarSemana(inicio: Date, qtdDias = 5): Date[] {
-  return Array.from({ length: qtdDias }, (_, i) => addDays(inicio, i));
-}
 
 function gerarDiasDoMes(mesAtual: Date): Date[] {
   const inicioMes = startOfMonth(mesAtual);
@@ -388,7 +385,50 @@ function VisualizadorAgenda({
   const [diaSelecionado, setDiaSelecionado] = useState<Date>(hoje);
   const [direcao, setDirecao] = useState<1 | -1 | 0>(0);
 
-  // Variantes de transição suave com interpolação direcional (slide + fade suave)
+  // ── Carrossel Contínuo da Visão Semanal (Embla Carousel) ──
+  const DIAS_PASSADO = 60;
+  const DIAS_FUTURO = 120;
+  const listaDiasCarrossel = useMemo(() => {
+    const inicio = subDays(hoje, DIAS_PASSADO);
+    const total = DIAS_PASSADO + DIAS_FUTURO;
+    return Array.from({ length: total }, (_, i) => addDays(inicio, i));
+  }, []);
+
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    align: "start",
+    slidesToScroll: 1,
+    containScroll: false,
+    dragFree: false,
+    startIndex: DIAS_PASSADO,
+    duration: 22,
+  });
+
+  const [primeiroDiaVisivelIdx, setPrimeiroDiaVisivelIdx] = useState(DIAS_PASSADO);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => {
+      const idx = emblaApi.selectedScrollSnap();
+      setPrimeiroDiaVisivelIdx(idx);
+      const d = listaDiasCarrossel[idx];
+      if (d) {
+        setDataRef(d);
+      }
+    };
+    emblaApi.on("select", onSelect);
+    emblaApi.on("reInit", onSelect);
+    onSelect();
+    return () => {
+      emblaApi.off("select", onSelect);
+      emblaApi.off("reInit", onSelect);
+    };
+  }, [emblaApi, listaDiasCarrossel]);
+
+  const diasVisiveisSemana = useMemo(() => {
+    return listaDiasCarrossel.slice(primeiroDiaVisivelIdx, primeiroDiaVisivelIdx + 5);
+  }, [listaDiasCarrossel, primeiroDiaVisivelIdx]);
+
+  // Variantes de transição suave para trocas de abas e navegações em Dia/Mês
   const variantesTransicao: Variants = {
     enter: (direction: number) => ({
       x: direction > 0 ? 36 : direction < 0 ? -36 : 0,
@@ -492,7 +532,6 @@ function VisualizadorAgenda({
   };
 
   // ── Helpers de data ──────────────────────────────────────────
-  const semana = gerarSemana(dataRef, 5);
   const diasDoMes = gerarDiasDoMes(dataRef);
 
   const agsPorData = (data: Date) =>
@@ -510,7 +549,7 @@ function VisualizadorAgenda({
   // Agendamentos do dia selecionado (para o modo dia e o painel de detalhes no modo mês)
   const agsDoDiaSelecionado = agsPorData(diaSelecionado);
 
-  // ── Navegação (Avança/Recua 1 dia no modo semana e modo dia com transição fluida) ──
+  // ── Navegação (No modo semana avança 1 dia no carrossel de forma contínua) ──
   const navegarAnterior = () => {
     setDirecao(-1);
     if (modo === "dia") {
@@ -518,7 +557,9 @@ function VisualizadorAgenda({
       setDataRef(d);
       setDiaSelecionado(d);
     } else if (modo === "semana") {
-      setDataRef((d) => subDays(d, 1));
+      if (emblaApi) {
+        emblaApi.scrollPrev();
+      }
     } else {
       setDataRef((d) => subMonths(d, 1));
     }
@@ -531,7 +572,9 @@ function VisualizadorAgenda({
       setDataRef(d);
       setDiaSelecionado(d);
     } else if (modo === "semana") {
-      setDataRef((d) => addDays(d, 1));
+      if (emblaApi) {
+        emblaApi.scrollNext();
+      }
     } else {
       setDataRef((d) => addMonths(d, 1));
     }
@@ -541,6 +584,12 @@ function VisualizadorAgenda({
     setDirecao(0);
     setDataRef(hoje);
     setDiaSelecionado(hoje);
+    if (modo === "semana" && emblaApi) {
+      const idxHoje = listaDiasCarrossel.findIndex((d) => isSameDay(d, hoje));
+      if (idxHoje !== -1) {
+        emblaApi.scrollTo(idxHoje);
+      }
+    }
   };
 
   const abrirDiaNaSemana = (dia: Date) => {
@@ -548,6 +597,12 @@ function VisualizadorAgenda({
     setDataRef(dia);
     setDiaSelecionado(dia);
     setModo("semana");
+    if (emblaApi) {
+      const idx = listaDiasCarrossel.findIndex((d) => isSameDay(d, dia));
+      if (idx !== -1) {
+        setTimeout(() => emblaApi.scrollTo(idx, false), 50);
+      }
+    }
   };
 
   return (
@@ -620,11 +675,18 @@ function VisualizadorAgenda({
           ) : modo === "semana" ? (
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">
-                {format(semana[0], "dd 'de' MMMM", { locale: ptBR })}
-                {" "}a {format(semana[semana.length - 1], "dd 'de' MMMM", { locale: ptBR })}
+                {diasVisiveisSemana.length > 0 ? (
+                  <>
+                    {format(diasVisiveisSemana[0], "dd 'de' MMMM", { locale: ptBR })}
+                    {" "}a{" "}
+                    {format(diasVisiveisSemana[diasVisiveisSemana.length - 1], "dd 'de' MMMM", { locale: ptBR })}
+                  </>
+                ) : (
+                  "Semana"
+                )}
               </h2>
               <p className="text-xs font-body text-muted-foreground mt-0.5">
-                Exibindo 5 dias • Clique nas setas para navegar 1 dia por vez
+                Exibindo 5 dias contínuos • Deslize ou use as setas para rolar dia a dia
               </p>
             </div>
           ) : (
@@ -669,6 +731,12 @@ function VisualizadorAgenda({
               onClick={() => {
                 setDirecao(0);
                 setModo("semana");
+                if (emblaApi) {
+                  const idx = listaDiasCarrossel.findIndex((d) => isSameDay(d, dataRef));
+                  if (idx !== -1) {
+                    setTimeout(() => emblaApi.scrollTo(idx, false), 50);
+                  }
+                }
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
                 modo === "semana"
@@ -894,86 +962,84 @@ function VisualizadorAgenda({
             </div>
           </motion.div>
         ) : modo === "semana" ? (
-          /* ── VISÃO SEMANAL (5 Colunas com Transição Fluida) ── */
-          <motion.div
-            key={`visao-semana-${format(semana[0], "yyyy-MM-dd")}`}
-            custom={direcao}
-            variants={variantesTransicao}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            className="space-y-4"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
-              {semana.map((dia) => {
-                const ags = agsPorData(dia);
-                const ehHoje = isSameDay(dia, hoje);
+          /* ── VISÃO SEMANAL: CARROSSEL CONTÍNUO DIA A DIA (Embla Carousel) ── */
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-3xl -mx-1 px-1 py-1" ref={emblaRef}>
+              <div className="flex -ml-3.5 touch-pan-y">
+                {listaDiasCarrossel.map((dia) => {
+                  const ags = agsPorData(dia);
+                  const ehHoje = isSameDay(dia, hoje);
 
-                return (
-                  <div
-                    key={dia.toString()}
-                    onDoubleClick={() => abrirNovoAgendamento(dia)}
-                    className="group relative flex flex-col gap-2 min-h-[160px] bg-card/40 hover:bg-card/70 p-2.5 rounded-2xl border border-border/20 hover:border-primary/40 transition-all shadow-sm"
-                    title="Clique no cabeçalho para abrir o dia ou dê duplo clique para agendar"
-                  >
-                    {/* Cabeçalho do Dia: Clicar abre a visão detalhada do dia hora por hora */}
-                    <button
-                      type="button"
-                      onClick={() => abrirDiaDetalhado(dia)}
-                      className={`text-center py-2 px-1 rounded-xl transition-all cursor-pointer group/header hover:scale-[1.03] hover:shadow-md ${
-                        ehHoje
-                          ? "bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30"
-                          : "bg-secondary/40 text-foreground hover:bg-primary/10 hover:text-primary"
-                      }`}
-                      title="Clique para abrir a visão hora a hora deste dia"
+                  return (
+                    <div
+                      key={format(dia, "yyyy-MM-dd")}
+                      className="flex-[0_0_100%] sm:flex-[0_0_50%] md:flex-[0_0_33.333%] lg:flex-[0_0_20%] min-w-0 pl-3.5 select-none"
                     >
-                      <div className="font-body text-[10px] font-bold uppercase tracking-wider opacity-75 group-hover/header:opacity-100 flex items-center justify-center gap-0.5">
-                        <span>{format(dia, "EEE", { locale: ptBR })}</span>
-                        <ArrowRight size={10} className="opacity-0 group-hover/header:opacity-100 transition-opacity" />
-                      </div>
-                      <div className="font-display font-extrabold text-lg leading-none mt-0.5">
-                        {format(dia, "d")}
-                      </div>
-                    </button>
+                      <div
+                        onDoubleClick={() => abrirNovoAgendamento(dia)}
+                        className="group relative flex flex-col gap-2 min-h-[220px] h-full bg-card/40 hover:bg-card/70 p-2.5 rounded-2xl border border-border/20 hover:border-primary/40 transition-all shadow-sm"
+                        title="Clique no cabeçalho para abrir o dia ou dê duplo clique para agendar"
+                      >
+                        {/* Cabeçalho do Dia */}
+                        <button
+                          type="button"
+                          onClick={() => abrirDiaDetalhado(dia)}
+                          className={`text-center py-2 px-1 rounded-xl transition-all cursor-pointer group/header hover:scale-[1.03] hover:shadow-md ${
+                            ehHoje
+                              ? "bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30"
+                              : "bg-secondary/40 text-foreground hover:bg-primary/10 hover:text-primary"
+                          }`}
+                          title="Clique para abrir a visão hora a hora deste dia"
+                        >
+                          <div className="font-body text-[10px] font-bold uppercase tracking-wider opacity-75 group-hover/header:opacity-100 flex items-center justify-center gap-0.5">
+                            <span>{format(dia, "EEE", { locale: ptBR })}</span>
+                            <ArrowRight size={10} className="opacity-0 group-hover/header:opacity-100 transition-opacity" />
+                          </div>
+                          <div className="font-display font-extrabold text-lg leading-none mt-0.5">
+                            {format(dia, "d")}
+                          </div>
+                        </button>
 
-                    {/* Botão Hover '+ Novo agendamento' na Semana */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        abrirNovoAgendamento(dia);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-body font-bold text-[11px] shadow-sm cursor-pointer"
-                    >
-                      <Plus size={13} />
-                      Novo agendamento
-                    </button>
+                        {/* Botão Hover '+ Novo agendamento' na Semana */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            abrirNovoAgendamento(dia);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-1 w-full py-1.5 px-2 rounded-xl bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground font-body font-bold text-[11px] shadow-sm cursor-pointer"
+                        >
+                          <Plus size={13} />
+                          Novo agendamento
+                        </button>
 
-                    {/* Agendamentos do Dia */}
-                    <div className="flex flex-col gap-2 flex-1">
-                      {ags.length === 0 ? (
-                        <div className="flex-1 flex items-center justify-center py-4">
-                          <span className="text-[11px] font-body text-muted-foreground/40 text-center">
-                            Sem consultas
-                          </span>
+                        {/* Agendamentos do Dia */}
+                        <div className="flex flex-col gap-2 flex-1">
+                          {ags.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center py-4">
+                              <span className="text-[11px] font-body text-muted-foreground/40 text-center">
+                                Sem consultas
+                              </span>
+                            </div>
+                          ) : (
+                            <AnimatePresence mode="popLayout">
+                              {ags.map((ag) => (
+                                <CardAgendamento
+                                  key={ag.id}
+                                  ag={ag}
+                                  isExcluindo={excluindoId === ag.id}
+                                  onVerDetalhes={(selecionado) => setAgendamentoDetalhes(selecionado)}
+                                />
+                              ))}
+                            </AnimatePresence>
+                          )}
                         </div>
-                      ) : (
-                        <AnimatePresence mode="popLayout">
-                          {ags.map((ag) => (
-                            <CardAgendamento
-                              key={ag.id}
-                              ag={ag}
-                              isExcluindo={excluindoId === ag.id}
-                              onVerDetalhes={(selecionado) => setAgendamentoDetalhes(selecionado)}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </motion.div>
+          </div>
         ) : (
           /* ── VISÃO MENSAL EXPANDIDA (Grade Completa com Transição Fluida) ── */
           <motion.div
