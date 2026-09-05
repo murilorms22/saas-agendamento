@@ -368,7 +368,7 @@ export default function LoginPage() {
 
       {/* Rodapé institucional neutro */}
       <footer className="mt-8 text-center text-xs font-body text-muted-foreground/80">
-        <p>© {new Date().getFullYear()} Plataforma SaaS de Agendamentos • Todos os direitos reservados</p>
+        <p>© {new Date().getFullYear()} Praxis • Gestão e Agendamento • Todos os direitos reservados</p>
       </footer>
     </div>
   );

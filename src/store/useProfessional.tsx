@@ -398,20 +398,45 @@ export function ProfessionalProvider({
 
           const slugFromPath = rawSlug;
           const searchParams = new URLSearchParams(location.search);
-          const slugAlvo = slugFromPath || searchParams.get("slug") || slugProp || "studio-fisio";
+          const slugAlvo = slugFromPath || searchParams.get("slug") || slugProp;
 
-          const { data, error: empresaError } = await supabase
-            .from("empresas")
-            .select("*")
-            .eq("slug", slugAlvo)
-            .maybeSingle();
+          if (slugAlvo) {
+            const { data, error: empresaError } = await supabase
+              .from("empresas")
+              .select("*")
+              .eq("slug", slugAlvo)
+              .maybeSingle();
 
-          if (empresaError) throw new Error(empresaError.message);
-          if (!data) {
-            throw new Error(`NOT_FOUND: Não encontramos nenhum profissional ou clínica no endereço "/${slugAlvo}".`);
+            if (empresaError) throw new Error(empresaError.message);
+            if (!data) {
+              throw new Error(`NOT_FOUND: Não encontramos nenhum profissional ou clínica no endereço "/${slugAlvo}".`);
+            }
+            empresaData = data;
+          } else {
+            // 🚀 ROTA RAIZ (/): MVP Piloto - Carrega a clínica piloto Maurício Lemes ou a primeira registrada
+            const { data: pilotoMauricio } = await supabase
+              .from("empresas")
+              .select("*")
+              .or("slug.eq.mauricio-lemes,nome_negocio.ilike.%Maurício%,nome_negocio.ilike.%Mauricio%")
+              .limit(1)
+              .maybeSingle();
+
+            if (pilotoMauricio) {
+              empresaData = pilotoMauricio;
+            } else {
+              const { data: fallbackEmpresa, error: fallbackError } = await supabase
+                .from("empresas")
+                .select("*")
+                .limit(1)
+                .maybeSingle();
+
+              if (fallbackError) throw new Error(fallbackError.message);
+              if (!fallbackEmpresa) {
+                throw new Error("NOT_FOUND: Nenhuma clínica piloto encontrada no sistema.");
+              }
+              empresaData = fallbackEmpresa;
+            }
           }
-
-          empresaData = data;
         }
 
         // 2️⃣ Busca os serviços vinculados ao ID da empresa

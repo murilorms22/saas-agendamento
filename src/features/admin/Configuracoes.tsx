@@ -15,12 +15,15 @@ import {
   Trash2,
   CalendarCheck,
   Clock,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
+import { isReservedSlug } from "../../constants/reservedSlugs";
 
 export default function Configuracoes() {
   return (
@@ -71,6 +74,7 @@ function ConfiguracoesConteudo() {
   const [especialidade, setEspecialidade] = useState(profissional.profissao || "");
   const [tagline, setTagline] = useState(profissional.tagline || "");
   const [descricao, setDescricao] = useState(profissional.descricao || "");
+  const [slug, setSlug] = useState(profissional.slug || "");
 
   // Estados de controle e feedback
   const [salvando, setSalvando] = useState(false);
@@ -100,8 +104,17 @@ function ConfiguracoesConteudo() {
       if (profissional.profissao) setEspecialidade(profissional.profissao);
       if (profissional.tagline) setTagline(profissional.tagline);
       if (profissional.descricao) setDescricao(profissional.descricao);
+      if (profissional.slug) setSlug(profissional.slug);
     }
   }, [profissional]);
+
+  const sanitizarSlug = (valor: string) =>
+    valor
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w-]/g, "")
+      .replace(/_/g, "-")
+      .replace(/-+/g, "-");
 
   // 🛡️ Brecha 3: Sanitização de Hexadecimal
   const corValida = REGEX_HEX.test(corHex.trim());
@@ -194,6 +207,18 @@ function ConfiguracoesConteudo() {
       return;
     }
 
+    // Validação e Sanitização do Slug Público
+    const slugLimpo = sanitizarSlug(slug);
+    if (!slugLimpo || slugLimpo.length < 3) {
+      exibirToast("O link público (slug) deve conter pelo menos 3 caracteres alfanuméricos.", "error");
+      return;
+    }
+
+    if (isReservedSlug(slugLimpo)) {
+      exibirToast(`O endereço "/${slugLimpo}" é uma palavra reservada do sistema. Por favor, escolha outro slug.`, "warning");
+      return;
+    }
+
     // Validação de segurança na URL da Logo (HTTPS estrito)
     const logoUrlLimpa = logoUrl.trim();
     if (logoUrlLimpa && !/^https:\/\//i.test(logoUrlLimpa)) {
@@ -203,6 +228,20 @@ function ConfiguracoesConteudo() {
 
     setSalvando(true);
     try {
+      // 🛡️ Validação de Unicidade de Slug contra colisão com outras empresas
+      const { data: slugEmUso } = await supabase
+        .from("empresas")
+        .select("id")
+        .eq("slug", slugLimpo)
+        .neq("id", profissional.id)
+        .maybeSingle();
+
+      if (slugEmUso) {
+        exibirToast(`O link "/${slugLimpo}" já está sendo utilizado por outra clínica. Escolha um link exclusivo.`, "warning");
+        setSalvando(false);
+        return;
+      }
+
       const dispAtual = profissional.disponibilidade || {};
       const novoDisp = {
         ...dispAtual,
@@ -220,6 +259,7 @@ function ConfiguracoesConteudo() {
       const { error: updateError } = await supabase
         .from("empresas")
         .update({
+          slug: slugLimpo,
           cor_primaria: hexNormalizado,
           logo_url: logoUrlLimpa || null,
           nome_negocio: nomeNegocio.trim() || profissional.nomeClinica,
@@ -231,11 +271,12 @@ function ConfiguracoesConteudo() {
 
       if (updateError) {
         console.error("[Configurações] Erro ao atualizar empresa:", updateError);
-        // Se a coluna logo_url ainda não existir no banco, tenta salvar apenas o essencial
+        // Se alguma coluna opcional ainda não existir no banco, tenta salvar apenas o essencial
         if (updateError.message.includes("column")) {
           const { error: fallbackError } = await supabase
             .from("empresas")
             .update({
+              slug: slugLimpo,
               cor_primaria: hexNormalizado,
               nome_negocio: nomeNegocio.trim() || profissional.nomeClinica,
               especialidade: especialidade.trim() || profissional.profissao,
@@ -385,6 +426,43 @@ function ConfiguracoesConteudo() {
                 placeholder="Ex: Atendimento personalizado com excelência e hora marcada."
                 className="w-full px-4 py-2.5 rounded-xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all resize-none"
               />
+            </div>
+
+            {/* Campo de Slug / Link Público de Agendamento */}
+            <div className="space-y-2 pt-3 border-t border-border/20">
+              <div className="flex items-center justify-between">
+                <label className="font-body text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Globe size={14} className="text-primary" />
+                  Link Público de Agendamento (Slug)
+                </label>
+                {profissional.slug && (
+                  <a
+                    href={`/${profissional.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-body text-primary hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <span>Testar página</span>
+                    <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+
+              <div className="flex items-center rounded-xl bg-background border border-border focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary transition-all overflow-hidden">
+                <span className="px-3.5 py-2.5 bg-secondary/50 text-muted-foreground font-mono text-xs select-none border-r border-border/50 shrink-0">
+                  {typeof window !== "undefined" ? window.location.host : "praxis.app"}/
+                </span>
+                <input
+                  type="text"
+                  value={slug}
+                  onChange={(e) => setSlug(sanitizarSlug(e.target.value))}
+                  placeholder="nome-da-sua-clinica"
+                  className="w-full px-3 py-2.5 bg-transparent text-xs font-mono font-bold text-foreground focus:outline-none"
+                />
+              </div>
+              <p className="text-[11px] font-body text-muted-foreground leading-relaxed">
+                Este é o link direto que seus pacientes utilizarão para agendar consultas. Use apenas letras minúsculas, números e hífens.
+              </p>
             </div>
           </div>
 
