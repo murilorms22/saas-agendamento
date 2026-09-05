@@ -348,6 +348,51 @@ function FluxoAgendamentoConteudo() {
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
+        // 3. Se não encontrou por auth_user_id, tenta vincular por e-mail caso já exista na base
+        if (!cliente && user.email) {
+          const { data: clienteEmail } = await supabase
+            .from("clientes")
+            .select("*")
+            .eq("empresa_id", profissional.id)
+            .eq("email", user.email)
+            .maybeSingle();
+
+          if (clienteEmail) {
+            await supabase
+              .from("clientes")
+              .update({ auth_user_id: user.id })
+              .eq("id", clienteEmail.id);
+            cliente = { ...clienteEmail, auth_user_id: user.id };
+          }
+        }
+
+        // 4. Se ainda não existir registro na tabela clientes, cria automaticamente para o paciente
+        if (!cliente) {
+          const nomeFallback =
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split("@")[0] ||
+            "Paciente";
+          const telFallback =
+            user.user_metadata?.telefone || user.user_metadata?.phone || "";
+
+          const { data: novoCliente, error: errCriar } = await supabase
+            .from("clientes")
+            .insert({
+              empresa_id: profissional.id,
+              nome: nomeFallback,
+              telefone: telFallback,
+              email: user.email,
+              auth_user_id: user.id,
+            })
+            .select()
+            .maybeSingle();
+
+          if (!errCriar && novoCliente) {
+            cliente = novoCliente;
+          }
+        }
+
         if (!ativo) return;
 
         if (cliente) {
@@ -726,19 +771,63 @@ function FluxoAgendamentoConteudo() {
     }
 
     // Busca ou garante registro na tabela 'clientes' vinculado ao auth_user_id
-    let clienteIdParaInsert = currentUser.id;
-    let clienteNome = currentUser.user_metadata?.full_name || clienteLogado?.nome || "Paciente";
-    let clienteTel = currentUser.user_metadata?.telefone || clienteLogado?.telefone || "";
+    let clienteNome =
+      currentUser.user_metadata?.full_name ||
+      currentUser.user_metadata?.name ||
+      clienteLogado?.nome ||
+      "Paciente";
+    let clienteTel =
+      currentUser.user_metadata?.telefone ||
+      currentUser.user_metadata?.phone ||
+      clienteLogado?.telefone ||
+      "";
 
-    const { data: clienteBanco } = await supabase
+    let { data: clienteBanco } = await supabase
       .from("clientes")
       .select("id, nome, telefone")
       .eq("empresa_id", profissional.id)
       .eq("auth_user_id", currentUser.id)
       .maybeSingle();
 
+    if (!clienteBanco && currentUser.email) {
+      const { data: clienteEmail } = await supabase
+        .from("clientes")
+        .select("id, nome, telefone")
+        .eq("empresa_id", profissional.id)
+        .eq("email", currentUser.email)
+        .maybeSingle();
+
+      if (clienteEmail) {
+        await supabase
+          .from("clientes")
+          .update({ auth_user_id: currentUser.id })
+          .eq("id", clienteEmail.id);
+        clienteBanco = clienteEmail;
+      }
+    }
+
+    if (!clienteBanco) {
+      const { data: novoCliente, error: errNovo } = await supabase
+        .from("clientes")
+        .insert({
+          empresa_id: profissional.id,
+          nome: clienteNome,
+          telefone: clienteTel,
+          email: currentUser.email,
+          auth_user_id: currentUser.id,
+        })
+        .select("id, nome, telefone")
+        .maybeSingle();
+
+      if (!errNovo && novoCliente) {
+        clienteBanco = novoCliente;
+      } else if (errNovo) {
+        console.error("[LandingPage] Falha ao auto-provisionar cliente:", errNovo);
+      }
+    }
+
+    let clienteIdParaInsert = clienteBanco?.id || currentUser.id;
     if (clienteBanco) {
-      clienteIdParaInsert = clienteBanco.id;
       if (clienteBanco.nome) clienteNome = clienteBanco.nome;
       if (clienteBanco.telefone) clienteTel = clienteBanco.telefone;
     }
