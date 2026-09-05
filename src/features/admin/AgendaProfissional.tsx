@@ -186,9 +186,9 @@ function mapearAgendamentoSemana(
 
 function BadgeStatus({ status }: { status: StatusAgendamento }) {
   const estilos: Record<StatusAgendamento, { cor: string; icone: React.ReactNode; tooltip: string }> = {
-    Pendente: { cor: "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30", icone: <Clock size={12} />, tooltip: "Pendente" },
-    Confirmado: { cor: "bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Confirmado" },
-    Finalizado: { cor: "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Finalizado" },
+    Pendente: { cor: "bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/30", icone: <Clock size={12} />, tooltip: "Pendente" },
+    Confirmado: { cor: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Confirmado" },
+    Finalizado: { cor: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/30", icone: <CheckCircle2 size={12} />, tooltip: "Finalizado" },
     Cancelado: { cor: "bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30", icone: <X size={12} />, tooltip: "Cancelado" },
   };
   const { cor, icone, tooltip } = estilos[status] ?? estilos.Pendente;
@@ -290,10 +290,10 @@ function CardAgendamento({
   onVerDetalhes: (ag: AgendamentoSemana) => void;
 }) {
   const fundos: Record<StatusAgendamento, string> = {
-    Confirmado: "bg-blue-500/10 border-blue-500/20 hover:border-blue-500/50",
-    Pendente: "bg-primary/10 border-primary/20 hover:border-primary/50",
-    Finalizado: "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-500/50",
-    Cancelado: "bg-rose-500/5 border-rose-500/10 opacity-50",
+    Confirmado: "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50",
+    Pendente: "bg-amber-500/10 border-amber-500/25 hover:border-amber-500/50",
+    Finalizado: "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50",
+    Cancelado: "bg-rose-500/5 border-rose-500/15 opacity-50",
   };
 
   return (
@@ -875,8 +875,8 @@ function VisualizadorAgenda({
                           <AnimatePresence mode="popLayout">
                             {agsNestaHora.map((ag) => {
                               const fundos: Record<StatusAgendamento, string> = {
-                                Confirmado: "bg-blue-500/10 border-blue-500/25",
-                                Pendente: "bg-primary/10 border-primary/25",
+                                Confirmado: "bg-emerald-500/10 border-emerald-500/25",
+                                Pendente: "bg-amber-500/10 border-amber-500/25",
                                 Finalizado: "bg-emerald-500/10 border-emerald-500/25",
                                 Cancelado: "bg-rose-500/10 border-rose-500/25 opacity-60",
                               };
@@ -1115,11 +1115,11 @@ function VisualizadorAgenda({
                       <div className="w-full space-y-1 my-1 overflow-hidden flex-1">
                         {ags.slice(0, 2).map((ag) => {
                           const dotCor =
-                            ag.status === "Confirmado"
+                            ag.status === "Confirmado" || ag.status === "Finalizado"
                               ? "bg-emerald-500"
                               : ag.status === "Cancelado"
                               ? "bg-rose-500"
-                              : "bg-primary";
+                              : "bg-amber-500";
                           return (
                             <div
                               key={ag.id}
@@ -1221,13 +1221,22 @@ function VisualizadorAgenda({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {agsDoDiaSelecionado.map((ag) => (
-                      <div
-                        key={ag.id}
-                        onClick={() => setAgendamentoDetalhes(ag)}
-                        className="p-4 rounded-2xl border border-border/30 bg-background flex flex-col justify-between gap-3 shadow-sm hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group"
-                        title="Clique para ver detalhes completos e editar"
-                      >
+                    {agsDoDiaSelecionado.map((ag) => {
+                      const fundosMesCard: Record<StatusAgendamento, string> = {
+                        Confirmado: "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50",
+                        Pendente: "bg-amber-500/10 border-amber-500/25 hover:border-amber-500/50",
+                        Finalizado: "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50",
+                        Cancelado: "bg-rose-500/5 border-rose-500/15 opacity-50",
+                      };
+                      return (
+                        <div
+                          key={ag.id}
+                          onClick={() => setAgendamentoDetalhes(ag)}
+                          className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-all cursor-pointer group ${
+                            fundosMesCard[ag.status] ?? fundosMesCard.Pendente
+                          }`}
+                          title="Clique para ver detalhes completos e editar"
+                        >
                         <div>
                           <p className="font-display font-bold text-foreground text-base group-hover:text-primary transition-colors">
                             {ag.nomeCliente}
@@ -1267,8 +1276,9 @@ function VisualizadorAgenda({
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
                 )}
               </div>
             </div>
@@ -1284,13 +1294,12 @@ function VisualizadorAgenda({
         {(
           [
             ["Confirmado", "bg-emerald-500"],
-            ["Pendente", "bg-primary"],
-            ["Cancelado", "bg-rose-500"],
+            ["Pendente", "bg-amber-500"],
           ] as const
         ).map(([label, cor]) => (
           <div key={label} className="flex items-center gap-1.5">
             <div className={`w-2.5 h-2.5 rounded-full ${cor}`} />
-            <span className="font-body text-xs text-muted-foreground">{label}</span>
+            <span className="font-body text-xs font-semibold text-foreground/80">{label}</span>
           </div>
         ))}
       </div>
