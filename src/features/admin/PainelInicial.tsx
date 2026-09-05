@@ -177,10 +177,43 @@ function PainelInicialConteudo() {
     setTimeout(() => setLinkCopiado(false), 2500);
   };
 
-  const handleCriarAgendamento = (novo: AgendamentoItem) => {
-    // Notifica sistema e leva para a agenda
-    window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: novo }));
-    setModalNovoAberto(false);
+  const handleCriarAgendamento = async (novo: AgendamentoItem) => {
+    if (!profissional?.id) return;
+
+    try {
+      const dataHoraIso = `${novo.data}T${novo.horario}:00Z`;
+      const { data, error } = await supabase
+        .from("agendamentos")
+        .insert({
+          empresa_id: profissional.id,
+          nome_cliente: novo.nomeCliente,
+          whatsapp_cliente: novo.telefone || "",
+          cliente_telefone: novo.telefone || "",
+          servico_nome: novo.servico,
+          data: novo.data,
+          horario: novo.horario,
+          data_hora_agendamento: dataHoraIso,
+          status: novo.status,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Erro ao salvar agendamento pelo Painel Inicial:", error);
+      }
+
+      const agCriado = {
+        ...novo,
+        id: data?.id ? String(data.id) : novo.id,
+      };
+
+      // Notifica sistema e leva para a agenda
+      window.dispatchEvent(new CustomEvent("agendamento-criado", { detail: agCriado }));
+      setModalNovoAberto(false);
+      navigate("/admin/agenda");
+    } catch (err) {
+      console.error("Erro inesperado ao criar agendamento:", err);
+    }
   };
 
   // Próximo agendamento de hoje

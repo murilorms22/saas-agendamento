@@ -138,7 +138,7 @@ function sanitizarTelefone(valor: string): string {
 function FluxoAgendamentoConteudo() {
   const { profissional: profissionalNullable } = useProfessional();
   const profissional = profissionalNullable!; // seguro: PageLoader garante não-null
-  const { user, signOut } = useAuth();
+  const { user, signInWithGoogle, signOut } = useAuth();
 
   // ── Estados do Stepper ──
   const [passoAtual, setPassoAtual] = useState<EtapaFluxo>(1);
@@ -153,7 +153,9 @@ function FluxoAgendamentoConteudo() {
 
   // ── Etapa 3: Identificação / Autenticação ──
   const [clienteLogado, setClienteLogado] = useState<ClienteAutenticado | null>(null);
+  const [isContaGestor, setIsContaGestor] = useState(false);
   const [abaAuth, setAbaAuth] = useState<"login" | "cadastro">("cadastro");
+  const [iniciandoGoogle, setIniciandoGoogle] = useState(false);
 
   // Formulário de Login
   const [loginEmail, setLoginEmail] = useState("");
@@ -202,22 +204,17 @@ function FluxoAgendamentoConteudo() {
       if (valor === null || valor === undefined) {
         sessionStorage.removeItem(chave);
       } else {
-        sessionStorage.setItem(chave, typeof valor === "string" ? valor : JSON.stringify(valor));
+        sessionStorage.setItem(chave, JSON.stringify(valor));
       }
     } catch (e) {
-      console.warn("[LandingPage] Falha ao gravar no sessionStorage:", e);
+      console.warn("[LandingPage] Erro ao gravar no sessionStorage:", e);
     }
   };
 
-  const lerDoSession = (chave: string): any => {
+  const lerDoSession = (chave: string) => {
     try {
       const item = sessionStorage.getItem(chave);
-      if (!item) return null;
-      try {
-        return JSON.parse(item);
-      } catch {
-        return item;
-      }
+      return item ? JSON.parse(item) : null;
     } catch {
       return null;
     }
@@ -230,18 +227,19 @@ function FluxoAgendamentoConteudo() {
       sessionStorage.removeItem(STORAGE_KEYS.HORARIO);
       sessionStorage.removeItem(STORAGE_KEYS.PASSO);
     } catch (e) {
-      console.warn("[LandingPage] Falha ao limpar sessionStorage:", e);
+      console.warn("[LandingPage] Erro ao limpar sessionStorage:", e);
     }
   };
 
-  const navegarParaPasso = (etapa: EtapaFluxo) => {
-    setPassoAtual(etapa);
-    salvarNoSession(STORAGE_KEYS.PASSO, etapa);
+  const navegarParaPasso = (novoPasso: EtapaFluxo) => {
+    setPassoAtual(novoPasso);
+    salvarNoSession(STORAGE_KEYS.PASSO, novoPasso);
   };
 
   const handleSelecionarServico = (servico: Servico) => {
     setServicoEscolhido(servico);
     salvarNoSession(STORAGE_KEYS.SERVICO, servico);
+    navegarParaPasso(2);
   };
 
   const handleSelecionarData = (dia: Date) => {
@@ -299,18 +297,39 @@ function FluxoAgendamentoConteudo() {
     }
   }, [profissional?.servicos]);
 
-  // ── Reconhecimento Automático de Sessão do Paciente ──
+  // ── Reconhecimento Automático de Sessão do Paciente ou Gestor ──
   useEffect(() => {
     let ativo = true;
 
     async function buscarPacienteAutenticado() {
       if (!user?.id || !profissional?.id) {
-        setClienteLogado(null);
+        if (ativo) {
+          setClienteLogado(null);
+          setIsContaGestor(false);
+        }
         return;
       }
 
       try {
-        const { data: cliente } = await supabase
+        // 1. Checa se o usuário autenticado é o dono da empresa / gestor administrativo
+        const { data: empresaDono } = await supabase
+          .from("empresas")
+          .select("id")
+          .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`)
+          .maybeSingle();
+
+        if (!ativo) return;
+
+        if (empresaDono) {
+          setIsContaGestor(true);
+          setClienteLogado(null);
+          return;
+        }
+
+        setIsContaGestor(false);
+
+        // 2. Busca o registro de cliente vinculado ao auth_user_id nesta clínica
+        let { data: cliente } = await supabase
           .from("clientes")
           .select("*")
           .eq("empresa_id", profissional.id)
@@ -615,12 +634,29 @@ function FluxoAgendamentoConteudo() {
     }
   };
 
+  const handleLoginGoogle = async () => {
+    salvarNoSession(STORAGE_KEYS.PASSO, 4);
+    setIniciandoGoogle(true);
+    try {
+      const { error } = await signInWithGoogle(window.location.href);
+      if (error) {
+        exibirToast("Não foi possível iniciar o login com o Google. Tente novamente.", "error");
+        setIniciandoGoogle(false);
+      }
+    } catch (err) {
+      console.error("[LandingPage] Erro ao autenticar com Google:", err);
+      exibirToast("Falha de conexão com o Google.", "error");
+      setIniciandoGoogle(false);
+    }
+  };
+
   // ── Logout e Troca de Conta Preservando as Escolhas (Etapa 3) ──
   const handleTrocarConta = async () => {
     try {
       setSalvando(true);
       await signOut();
       setClienteLogado(null);
+      setIsContaGestor(false);
       setLoginEmail("");
       setLoginSenha("");
       setCadNome("");
@@ -639,6 +675,11 @@ function FluxoAgendamentoConteudo() {
 
   // ── Etapa 4: Finalização Segura do Agendamento (Red Team Protected) ──
   const handleConfirmarAgendamento = async () => {
+    if (isContaGestor) {
+      exibirToast("Você está conectado como Administrador desta clínica. Troque de conta para agendar como paciente.", "warning");
+      return;
+    }
+
     if (!servicoEscolhido || !dataSelecionada || !horarioSelecionado) {
       exibirToast("Dados incompletos para confirmar o agendamento.", "error");
       navegarParaPasso(1);
@@ -1195,8 +1236,38 @@ function FluxoAgendamentoConteudo() {
                     transition={{ duration: 0.25 }}
                     className="max-w-md mx-auto w-full space-y-6"
                   >
-                    {/* Se o paciente já está logado, exibe o crachá de reconhecimento */}
-                    {clienteLogado ? (
+                    {/* Cenário A: Conta de Administrador detectada */}
+                    {isContaGestor ? (
+                      <div className="p-6 sm:p-8 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-center space-y-4 shadow-soft">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+                          <AlertTriangle size={32} />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-body uppercase font-bold text-amber-700 dark:text-amber-300 tracking-wider">
+                            Perfil de Administrador
+                          </span>
+                          <h3 className="font-display font-extrabold text-xl text-foreground mt-1">
+                            Conta do Gestor Conectada
+                          </h3>
+                          <p className="font-body text-xs text-muted-foreground mt-2 leading-relaxed">
+                            Você está conectado com a conta de gestor de <strong className="text-foreground">{profissional.nomeClinica}</strong>. Para simular e agendar uma consulta como paciente, utilize o botão abaixo para trocar de conta ou acesse em uma janela anônima.
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-amber-500/20 flex flex-col sm:flex-row gap-3">
+                          <button
+                            type="button"
+                            onClick={handleTrocarConta}
+                            disabled={salvando}
+                            className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-body font-bold text-xs shadow-soft transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                          >
+                            <LogOut size={14} />
+                            <span>Trocar de Conta</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : clienteLogado ? (
+                      /* Cenário B: Paciente reconhecido */
                       <div className="p-6 rounded-3xl bg-background border border-border shadow-soft text-center space-y-4">
                         <div className="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center font-display font-extrabold text-2xl shadow-inner">
                           {clienteLogado.nome.charAt(0).toUpperCase()}
@@ -1233,8 +1304,58 @@ function FluxoAgendamentoConteudo() {
                         </div>
                       </div>
                     ) : (
-                      /* Formulário com Abas: Login ou Cadastro */
+                      /* Cenário C: Formulário e Google OAuth Unificado */
                       <div className="bg-background p-6 rounded-3xl border border-border shadow-soft space-y-5">
+                        {/* Botão de Destaque Google OAuth (Cadastro e Login em 1 clique) */}
+                        <motion.button
+                          whileHover={iniciandoGoogle ? {} : { scale: 1.02, y: -1 }}
+                          whileTap={iniciandoGoogle ? {} : { scale: 0.98 }}
+                          onClick={handleLoginGoogle}
+                          disabled={iniciandoGoogle || salvando}
+                          type="button"
+                          className="w-full flex items-center justify-center gap-3 py-3.5 px-5 rounded-2xl bg-white text-slate-700 hover:text-slate-900 font-body font-bold text-sm border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {iniciandoGoogle ? (
+                            <>
+                              <Loader2 size={18} className="animate-spin text-primary" />
+                              <span>Conectando ao Google...</span>
+                            </>
+                          ) : (
+                            <>
+                              {/* Ícone Autêntico SVG do Google */}
+                              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                <path
+                                  fill="#4285F4"
+                                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                                />
+                                <path
+                                  fill="#34A853"
+                                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.27 21.36 7.37 24 12 24z"
+                                />
+                                <path
+                                  fill="#FBBC05"
+                                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.97 0 12s.46 3.84 1.26 5.42l4.02-3.15z"
+                                />
+                                <path
+                                  fill="#EA4335"
+                                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                                />
+                              </svg>
+                              <span>Continuar com Google</span>
+                            </>
+                          )}
+                        </motion.button>
+
+                        {/* Divisor Visual */}
+                        <div className="relative flex items-center justify-center">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-border/50" />
+                          </div>
+                          <span className="relative bg-background px-3 text-[11px] font-body font-semibold uppercase tracking-wider text-muted-foreground/70">
+                            ou com e-mail e senha
+                          </span>
+                        </div>
+
                         {/* Toggle de Abas */}
                         <div className="grid grid-cols-2 p-1 bg-secondary/60 rounded-xl border border-border/40 text-xs font-body font-bold">
                           <button

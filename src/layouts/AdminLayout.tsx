@@ -12,17 +12,17 @@ import {
   ChevronRight,
   ExternalLink,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
 import { useAuth } from "../contexts/AuthContext";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
 import { supabase } from "../lib/supabase";
 
 const navItems = [
-  { to: "/admin",               label: "Painel Inicial",  icon: LayoutDashboard, exact: true  },
-  { to: "/admin/resumo",        label: "Resumo do Dia",   icon: CalendarDays,    exact: false },
-  { to: "/admin/agenda",        label: "Minha Agenda",    icon: Calendar,        exact: false },
-  { to: "/admin/configuracoes", label: "Configurações",   icon: Settings,        exact: false },
+  { to: "/admin", label: "Painel Inicial", icon: LayoutDashboard, exact: true },
+  { to: "/admin/resumo", label: "Resumo do Dia", icon: CalendarDays, exact: false },
+  { to: "/admin/agenda", label: "Minha Agenda", icon: Calendar, exact: false },
+  { to: "/admin/configuracoes", label: "Configurações", icon: Settings, exact: false },
 ];
 
 export default function AdminLayout() {
@@ -69,7 +69,7 @@ export default function AdminLayout() {
   };
 
   const nomeClinica = profissional?.nomeClinica ?? "Carregando...";
-  const profissao   = profissional?.profissao   ?? "";
+  const profissao = profissional?.profissao ?? "";
 
   const isActive = (to: string, exact: boolean) =>
     exact ? location.pathname === to : location.pathname.startsWith(to);
@@ -138,9 +138,8 @@ export default function AdminLayout() {
       {/* ── Sidebar Sempre Visível: Retraída (Ícones) vs Expandida (Overlay sem escurecer a página) ── */}
       <aside
         ref={sidebarRef}
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/80 shadow-2xl transition-all duration-300 ease-in-out ${
-          sidebarAberta ? "w-72 sm:w-80" : "w-16 sm:w-20"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-card/95 backdrop-blur-2xl border-r border-border/80 shadow-2xl transition-all duration-300 ease-in-out ${sidebarAberta ? "w-72 sm:w-80" : "w-16 sm:w-20"
+          }`}
         aria-label="Menu de Navegação Lateral"
       >
         {/* Cabeçalho da Sidebar */}
@@ -181,14 +180,30 @@ export default function AdminLayout() {
                     <CalendarCheck size={18} />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-display font-bold text-xs tracking-tight text-foreground leading-tight truncate">
-                    {nomeClinica}
-                  </h2>
-                  <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider truncate">
-                    {profissao || "Painel"}
-                  </p>
-                </div>
+                <AnimatePresence>
+                  {sidebarAberta && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                      }}
+                      exit={{
+                        opacity: 0,
+                        transition: { delay: 0, duration: 0 },
+                      }}
+                      className="min-w-0 flex-1"
+                    >
+                      <h2 className="font-display font-bold text-xs tracking-tight text-foreground leading-tight truncate">
+                        {nomeClinica}
+                      </h2>
+                      <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider truncate">
+                        {profissao || "Painel"}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Seta para fechar posicionada à direita */}
@@ -211,16 +226,33 @@ export default function AdminLayout() {
             type="button"
             onClick={() => setModalAberto(true)}
             title="Novo agendamento"
-            className={`flex items-center rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group ${
-              sidebarAberta
-                ? "w-full justify-center gap-2.5 px-4 py-3"
-                : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
-            }`}
+            className={`flex items-center rounded-xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all cursor-pointer group ${sidebarAberta
+              ? "w-full justify-center gap-2.5 px-4 py-3"
+              : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
+              }`}
           >
             <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:rotate-90 duration-200 shrink-0">
               <Plus size={14} className="stroke-[3]" />
             </div>
-            {sidebarAberta && <span>Novo agendamento</span>}
+            <AnimatePresence>
+              {sidebarAberta && (
+                <motion.span
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{
+                    opacity: 1,
+                    x: 0,
+                    transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                  }}
+                  exit={{
+                    opacity: 0,
+                    transition: { delay: 0, duration: 0 },
+                  }}
+                  className="truncate"
+                >
+                  Novo agendamento
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         </div>
 
@@ -233,22 +265,37 @@ export default function AdminLayout() {
                 key={to}
                 to={to}
                 title={!sidebarAberta ? label : undefined}
-                className={`flex items-center rounded-xl font-body transition-all group ${
-                  sidebarAberta
-                    ? `gap-3.5 px-3.5 py-3 w-full text-sm font-semibold ${
-                        active
-                          ? "bg-primary text-primary-foreground shadow-soft font-bold"
-                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                      }`
-                    : `w-11 h-11 sm:w-12 sm:h-12 justify-center ${
-                        active
-                          ? "bg-primary text-primary-foreground shadow-soft"
-                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                      }`
-                }`}
+                className={`flex items-center rounded-xl font-body transition-all group ${sidebarAberta
+                  ? `gap-3.5 px-3.5 py-3 w-full text-sm font-semibold ${active
+                    ? "bg-primary text-primary-foreground shadow-soft font-bold"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  }`
+                  : `w-11 h-11 sm:w-12 sm:h-12 justify-center ${active
+                    ? "bg-primary text-primary-foreground shadow-soft"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  }`
+                  }`}
               >
                 <Icon size={19} className="shrink-0 stroke-[2.2]" />
-                {sidebarAberta && <span className="truncate">{label}</span>}
+                <AnimatePresence>
+                  {sidebarAberta && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                      }}
+                      exit={{
+                        opacity: 0,
+                        transition: { delay: 0, duration: 0 },
+                      }}
+                      className="truncate"
+                    >
+                      {label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </Link>
             );
           })}
@@ -260,21 +307,51 @@ export default function AdminLayout() {
               target="_blank"
               rel="noopener noreferrer"
               title={!sidebarAberta ? "Ver Página Pública" : undefined}
-              className={`flex items-center rounded-xl font-body text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-all border border-border/40 group ${
-                sidebarAberta
-                  ? "justify-between px-3.5 py-2.5 w-full font-semibold"
-                  : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
-              }`}
+              className={`flex items-center rounded-xl font-body text-xs text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-all border border-border/40 group ${sidebarAberta
+                ? "justify-between px-3.5 py-2.5 w-full font-semibold"
+                : "w-11 h-11 sm:w-12 sm:h-12 justify-center"
+                }`}
             >
               <div className="flex items-center gap-2.5">
                 <ExternalLink size={16} className="text-primary group-hover:scale-110 transition-transform shrink-0" />
-                {sidebarAberta && <span>Ver Página Pública</span>}
+                <AnimatePresence>
+                  {sidebarAberta && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                      }}
+                      exit={{
+                        opacity: 0,
+                        transition: { delay: 0, duration: 0 },
+                      }}
+                      className="truncate"
+                    >
+                      Ver Página Pública
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </div>
-              {sidebarAberta && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary font-mono text-muted-foreground shrink-0">
-                  Online
-                </span>
-              )}
+              <AnimatePresence>
+                {sidebarAberta && (
+                  <motion.span
+                    initial={{ opacity: 0 }}
+                    animate={{
+                      opacity: 1,
+                      transition: { delay: 0.2, duration: 0.15 },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      transition: { delay: 0, duration: 0 },
+                    }}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-secondary font-mono text-muted-foreground shrink-0"
+                  >
+                    Online
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </a>
           </div>
         </nav>
@@ -283,9 +360,8 @@ export default function AdminLayout() {
         <div className={`border-t border-border/30 bg-card/60 transition-all duration-300 ${sidebarAberta ? "p-4 space-y-3" : "p-2 sm:p-2.5 flex flex-col items-center space-y-2"}`}>
           {user && (
             <div
-              className={`flex items-center rounded-xl bg-secondary/40 border border-border/30 ${
-                sidebarAberta ? "gap-2.5 px-3 py-2 w-full" : "w-11 h-11 sm:w-12 sm:h-12 justify-center p-1"
-              }`}
+              className={`flex items-center rounded-xl bg-secondary/40 border border-border/30 ${sidebarAberta ? "gap-2.5 px-3 py-2 w-full" : "w-11 h-11 sm:w-12 sm:h-12 justify-center p-1"
+                }`}
               title={!sidebarAberta ? user.user_metadata?.full_name || user.email || "Perfil" : undefined}
             >
               {user.user_metadata?.avatar_url ? (
@@ -300,16 +376,30 @@ export default function AdminLayout() {
                 </div>
               )}
 
-              {sidebarAberta && (
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-body font-bold text-foreground truncate">
-                    {user.user_metadata?.full_name || "Profissional"}
-                  </p>
-                  <p className="text-[10px] font-body text-muted-foreground truncate">
-                    {user.email}
-                  </p>
-                </div>
-              )}
+              <AnimatePresence>
+                {sidebarAberta && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{
+                      opacity: 1,
+                      x: 0,
+                      transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      transition: { delay: 0, duration: 0 },
+                    }}
+                    className="min-w-0 flex-1"
+                  >
+                    <p className="text-xs font-body font-bold text-foreground truncate">
+                      {user.user_metadata?.full_name || "Profissional"}
+                    </p>
+                    <p className="text-[10px] font-body text-muted-foreground truncate">
+                      {user.email}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -317,12 +407,28 @@ export default function AdminLayout() {
             type="button"
             onClick={handleSair}
             title="Sair da Conta"
-            className={`flex items-center justify-center rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-xs transition-all cursor-pointer ${
-              sidebarAberta ? "w-full gap-2 px-4 py-2.5" : "w-11 h-11 sm:w-12 sm:h-12"
-            }`}
+            className={`flex items-center justify-center rounded-xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground font-body font-semibold text-xs transition-all cursor-pointer ${sidebarAberta ? "w-full gap-2 px-4 py-2.5" : "w-11 h-11 sm:w-12 sm:h-12"
+              }`}
           >
             <LogOut size={16} className="shrink-0" />
-            {sidebarAberta && <span>Sair</span>}
+            <AnimatePresence>
+              {sidebarAberta && (
+                <motion.span
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{
+                    opacity: 1,
+                    x: 0,
+                    transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                  }}
+                  exit={{
+                    opacity: 0,
+                    transition: { delay: 0, duration: 0 },
+                  }}
+                >
+                  Sair
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         </div>
       </aside>

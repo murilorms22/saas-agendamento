@@ -77,7 +77,7 @@ export function ModalNovoAgendamento({
       try {
         const { data: ags, error } = await supabase
           .from("agendamentos")
-          .select("id, horario, data, data_hora_agendamento, nome_cliente, status")
+          .select("id, horario, data, data_hora_agendamento, nome_cliente, status, clientes(nome)")
           .eq("empresa_id", empresaId)
           .neq("status", "Cancelado");
 
@@ -93,10 +93,12 @@ export function ModalNovoAgendamento({
                 const parte = a.data_hora_agendamento.split("T")[1];
                 if (parte) h = parte.slice(0, 5);
               }
+              const cliNome = Array.isArray(a.clientes) ? a.clientes[0]?.nome : (a.clientes as any)?.nome;
+              const nome = a.nome_cliente || a.cliente_nome || a.nome || cliNome || "Paciente";
               return {
                 id: String(a.id),
                 horario: h ?? "08:00",
-                nomeCliente: a.nome_cliente ?? "Cliente",
+                nomeCliente: nome,
               };
             });
 
@@ -135,6 +137,7 @@ export function ModalNovoAgendamento({
 
     // Inicializa os campos SOMENTE no momento em que o modal abre (transição de false -> true)
     if (aberto && !abertoAnteriorRef.current) {
+      setErroTrava(null);
       if (agendamentoInicial) {
         setDataSelecionada(agendamentoInicial.data);
         setNomeCliente(agendamentoInicial.nomeCliente);
@@ -196,25 +199,10 @@ export function ModalNovoAgendamento({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nomeCliente.trim()) return;
+    const nomeLimpo = nomeCliente.trim();
+    if (!nomeLimpo) return;
 
-    // Salva ou atualiza o cliente na base do profissional
-    if (empresaId) {
-      try {
-        await supabase.from("clientes").upsert(
-          {
-            empresa_id: empresaId,
-            nome: nomeCliente.trim(),
-            telefone: telefone.trim(),
-          },
-          { onConflict: "empresa_id,telefone" }
-        );
-      } catch (err) {
-        console.warn("Aviso ao salvar cliente:", err);
-      }
-    }
-
-    // Trava de Segurança: Não permite que o profissional agende por cima de um horário já ocupado
+    // 1. Trava de Segurança Local: Não permite agendar por cima de horário já ocupado
     const conflitoLocal = agendamentosDoDia.find(
       (a) => a.horario === horario && (!agendamentoInicial || String(a.id) !== String(agendamentoInicial.id))
     );
@@ -224,12 +212,12 @@ export function ModalNovoAgendamento({
       return;
     }
 
-    // Checagem direta no Supabase para garantir integridade
+    // 2. Trava de Segurança no Banco: Checagem direta no Supabase para garantir integridade atômica
     if (empresaId) {
       try {
         const { data: conflitosNoBanco } = await supabase
           .from("agendamentos")
-          .select("id, nome_cliente")
+          .select("id, nome_cliente, clientes(nome)")
           .eq("empresa_id", empresaId)
           .eq("data", dataSelecionada)
           .eq("horario", horario)
@@ -240,7 +228,11 @@ export function ModalNovoAgendamento({
         );
 
         if (conflitoReal) {
-          setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${conflitoReal.nome_cliente} nesta data!`);
+          const cliNome = Array.isArray((conflitoReal as any).clientes)
+            ? (conflitoReal as any).clientes[0]?.nome
+            : (conflitoReal as any).clientes?.nome;
+          const nomeConflito = conflitoReal.nome_cliente || cliNome || "outro paciente";
+          setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${nomeConflito} nesta data!`);
           return;
         }
       } catch (checkErr) {
@@ -248,12 +240,29 @@ export function ModalNovoAgendamento({
       }
     }
 
+    // 3. Salva ou atualiza o cliente na base do profissional apenas após passar pelas travas
+    const telLimpo = telefone.trim();
+    if (empresaId && telLimpo) {
+      try {
+        await supabase.from("clientes").upsert(
+          {
+            empresa_id: empresaId,
+            nome: nomeLimpo,
+            telefone: telLimpo,
+          },
+          { onConflict: "empresa_id,telefone" }
+        );
+      } catch (err) {
+        console.warn("Aviso ao salvar cliente:", err);
+      }
+    }
+
     const item: AgendamentoItem = {
       id: agendamentoInicial ? agendamentoInicial.id : `ag_${Date.now()}`,
       data: dataSelecionada,
       horario,
-      nomeCliente: nomeCliente.trim(),
-      telefone: telefone.trim(),
+      nomeCliente: nomeLimpo,
+      telefone: telLimpo,
       servico: servicoNome,
       status,
     };
@@ -336,7 +345,10 @@ export function ModalNovoAgendamento({
               type="date"
               required
               value={dataSelecionada}
-              onChange={(e) => setDataSelecionada(e.target.value)}
+              onChange={(e) => {
+                setDataSelecionada(e.target.value);
+                setErroTrava(null);
+              }}
               className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
             />
           </div>

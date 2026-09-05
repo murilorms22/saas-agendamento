@@ -94,14 +94,29 @@ function mapearAgendamento(
     statusFinal = row.status;
   }
 
+  const cliNome = Array.isArray((row as any).clientes)
+    ? (row as any).clientes[0]?.nome
+    : (row as any).clientes?.nome;
+  const cliTel = Array.isArray((row as any).clientes)
+    ? (row as any).clientes[0]?.telefone
+    : (row as any).clientes?.telefone;
+
+  const nomeResolvido =
+    row.nome_cliente ||
+    row.cliente_nome ||
+    row.nome ||
+    cliNome ||
+    "Paciente";
+
   return {
     id: String(row.id),
-    nomeCliente: row.nome_cliente ?? row.cliente_nome ?? row.nome ?? "Cliente",
+    nomeCliente: nomeResolvido,
     telefone:
       row.whatsapp_cliente ??
       row.cliente_telefone ??
       row.telefone ??
       row.whatsapp ??
+      cliTel ??
       "",
     servico: servicoNome,
     horario: horarioFinal,
@@ -231,14 +246,17 @@ function DashboardConteudo() {
     );
     try {
       // 🛡️ Trava Dupla contra IDOR
+      const dataHoraIso = `${editado.data}T${editado.horario}:00Z`;
       await supabase
         .from("agendamentos")
         .update({
           nome_cliente: editado.nomeCliente,
-          cliente_telefone: editado.telefone,
+          whatsapp_cliente: editado.telefone || "",
+          cliente_telefone: editado.telefone || "",
           servico_nome: editado.servico,
           data: editado.data,
           horario: editado.horario,
+          data_hora_agendamento: dataHoraIso,
           status: editado.status,
         })
         .eq("id", editado.id)
@@ -264,7 +282,7 @@ function DashboardConteudo() {
       try {
         const { data, error } = await supabase
           .from("agendamentos")
-          .select("*")
+          .select("*, clientes(nome, telefone)")
           .eq("empresa_id", profissional.id)
           .order("data", { ascending: false })
           .order("horario", { ascending: true });

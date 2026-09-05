@@ -1,8 +1,9 @@
-import { type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 
 interface AuthGuardProps {
   children?: ReactNode;
@@ -11,21 +12,71 @@ interface AuthGuardProps {
 /**
  * AuthGuard — Proteção rigorosa de rotas administrativas.
  *
- * Tratamento de Vazamento:
- * Enquanto a sessão estiver em verificação (isLoading === true),
+ * Tratamento de Vazamento e Blindagem por Perfil:
+ * Enquanto a sessão estiver em verificação (isLoading === true ou isCheckingAdmin === true),
  * absolutamente nenhum componente filho (painel, agenda, dados de clientes)
  * é instanciado na árvore do React, bloqueando qualquer trigger de query
- * ao banco de dados Supabase antes da confirmação do token de autenticação.
+ * ao banco de dados Supabase antes da confirmação das credenciais.
  *
  * Se a verificação terminar e não houver usuário autenticado,
  * redireciona instantaneamente para /login preservando o destino original.
+ *
+ * Se o usuário for um paciente autenticado (sem registro em empresas),
+ * bloqueia o acesso ao /admin e redireciona com aviso claro.
  */
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, signOut } = useAuth();
   const location = useLocation();
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  // 1. Tela de carregamento segura durante a verificação de token pelo Supabase
-  if (isLoading) {
+  useEffect(() => {
+    let cancelado = false;
+
+    async function validarPerfilAdmin() {
+      if (!user) {
+        if (!cancelado) {
+          setIsAdmin(false);
+          setIsCheckingAdmin(false);
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("empresas")
+          .select("id")
+          .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`)
+          .maybeSingle();
+
+        if (cancelado) return;
+
+        if (error || !data) {
+          console.warn("[AuthGuard] Usuário sem clínica associada tentou acessar /admin.");
+          await signOut();
+          setIsAdmin(false);
+        } else {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        console.error("[AuthGuard] Erro ao validar perfil de administrador:", err);
+        if (!cancelado) setIsAdmin(false);
+      } finally {
+        if (!cancelado) setIsCheckingAdmin(false);
+      }
+    }
+
+    if (!isLoading) {
+      validarPerfilAdmin();
+    }
+
+    return () => {
+      cancelado = true;
+    };
+  }, [user, isLoading, signOut]);
+
+  // 1. Tela de carregamento segura durante a verificação de token e perfil administrativo
+  if (isLoading || isCheckingAdmin) {
     return (
       <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-background px-4">
         {/* Glow de fundo sutil */}
@@ -46,23 +97,34 @@ export function AuthGuard({ children }: AuthGuardProps) {
           <div className="flex items-center gap-2.5 mb-2">
             <Loader2 size={18} className="animate-spin text-primary shrink-0" />
             <h3 className="font-display font-bold text-lg text-foreground">
-              Verificando autenticação
+              Verificando permissões
             </h3>
           </div>
 
           <p className="font-body text-xs text-muted-foreground leading-relaxed max-w-xs">
-            Validando suas credenciais de segurança antes de liberar o acesso à sua agenda.
+            Validando suas credenciais de gestor antes de liberar o acesso à sua agenda.
           </p>
         </motion.div>
       </div>
     );
   }
 
-  // 2. Não autenticado: Redireciona imediatamente para a tela de login
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // 2. Não autenticado ou Não é administrador: Redireciona para /login com mensagem explicativa
+  if (!user || isAdmin === false) {
+    return (
+      <Navigate
+        to="/login"
+        state={{
+          from: location,
+          erro: !user
+            ? undefined
+            : "Esta conta não possui permissão administrativa. Apenas profissionais cadastrados podem acessar este painel.",
+        }}
+        replace
+      />
+    );
   }
 
-  // 3. Autenticado com sucesso: Renderiza os componentes protegidos
+  // 3. Autenticado como Administrador: Renderiza os componentes protegidos
   return <>{children}</>;
 }

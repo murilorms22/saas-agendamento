@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
+import { supabase } from "../../lib/supabase";
+
 export default function LoginPage() {
-  const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword } = useAuth();
+  const { user, isLoading: authLoading, signInWithGoogle, signInWithPassword, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,13 +40,43 @@ export default function LoginPage() {
     }
   }, [location.state]);
 
-  // Redireciona se o usuário já estiver autenticado
+  // Redireciona com validação estrita se o usuário já estiver autenticado
   useEffect(() => {
-    if (!authLoading && user) {
-      const destino = (location.state as any)?.from?.pathname || "/admin";
-      navigate(destino, { replace: true });
+    let cancelado = false;
+
+    async function validarERedirecionar() {
+      if (authLoading || !user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("empresas")
+          .select("id")
+          .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`)
+          .maybeSingle();
+
+        if (cancelado) return;
+
+        if (error || !data) {
+          console.warn("[LoginPage] Usuário autenticado sem clínica associada.");
+          await signOut();
+          setErroLogin("Esta conta não possui permissão administrativa. Apenas profissionais cadastrados podem acessar este painel.");
+          return;
+        }
+
+        const rawDestino = (location.state as any)?.from?.pathname;
+        const destino = rawDestino && rawDestino.startsWith("/admin") ? rawDestino : "/admin";
+        navigate(destino, { replace: true });
+      } catch (err) {
+        console.error("[LoginPage] Erro ao validar clínica do profissional:", err);
+      }
     }
-  }, [user, authLoading, navigate, location.state]);
+
+    validarERedirecionar();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [user, authLoading, navigate, location.state, signOut]);
 
   // Handler de login com e-mail e senha
   const handleLoginEmail = async (e: React.FormEvent) => {
@@ -73,7 +105,7 @@ export default function LoginPage() {
         }
         setEnviandoEmail(false);
       } else {
-        // Sucesso: useEffect redirecionará automaticamente
+        // Sucesso: useEffect com validação de empresa cuidará do redirecionamento
         setEnviandoEmail(false);
       }
     } catch (err: any) {
@@ -87,7 +119,7 @@ export default function LoginPage() {
     setErroLogin(null);
     setIniciandoGoogle(true);
     try {
-      const { error } = await signInWithGoogle();
+      const { error } = await signInWithGoogle("/admin");
       if (error) {
         setErroLogin(
           error.message ||

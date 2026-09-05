@@ -13,7 +13,7 @@ export interface AuthContextType {
   session: Session | null;
   accessToken: string | null;
   isLoading: boolean;
-  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: (redirectPath?: string) => Promise<{ error: AuthError | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
 }
@@ -68,11 +68,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Inicia o fluxo de autenticação com o Google via OAuth no Supabase.
-   * Redireciona o usuário para o consentimento do Google e retorna para /admin.
+   * Suporta tanto login de profissional (/admin) quanto agendamento de paciente (landing page).
    */
-  const signInWithGoogle = async (): Promise<{ error: AuthError | null }> => {
+  const signInWithGoogle = async (redirectPath?: string): Promise<{ error: AuthError | null }> => {
     try {
-      const redirectUrl = `${window.location.origin}/admin`;
+      let redirectUrl = `${window.location.origin}/admin`;
+      if (redirectPath) {
+        redirectUrl = redirectPath.startsWith("http")
+          ? redirectPath
+          : `${window.location.origin}${redirectPath.startsWith("/") ? "" : "/"}${redirectPath}`;
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
