@@ -2,10 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { format, isThisWeek, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Check,
-  X,
   Clock,
-  CalendarDays,
   CheckCircle2,
   User,
   CalendarOff,
@@ -21,13 +18,22 @@ import {
   AlertCircle,
   Calendar as CalendarIcon,
   Pencil,
+  ArrowUpDown,
+  Filter,
+  X,
+  FileText,
+  RotateCcw,
+  CalendarDays,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
-import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
-import { ModalNovoAgendamento, type AgendamentoItem } from "../../components/ModalNovoAgendamento";
+import {
+  ModalEdicaoAgendamento,
+  type AgendamentoItem,
+  type StatusAgendamento,
+} from "../../components/ModalEdicaoAgendamento";
 
 export default function AdminDashboard() {
   return (
@@ -41,7 +47,7 @@ export default function AdminDashboard() {
 // Tipos & Status Válidos
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type Status = "Pendente" | "Confirmado" | "Finalizado" | "Cancelado";
+export type Status = StatusAgendamento;
 
 export type Agendamento = {
   id: string;
@@ -51,6 +57,7 @@ export type Agendamento = {
   horario: string;
   data: string;
   status: Status;
+  observacoes?: string;
 };
 
 interface ToastMsg {
@@ -135,8 +142,13 @@ function mapearAgendamento(
     horario: horarioFinal,
     data: dataFinal,
     status: statusFinal,
+    observacoes: row.observacoes ?? row.notas ?? row.notas_clinicas ?? row.descricao ?? "",
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Configurações Visuais de Status
+// ─────────────────────────────────────────────────────────────────────────────
 
 const statusConfig: Record<
   Status,
@@ -154,7 +166,7 @@ const statusConfig: Record<
     bgBadge: "bg-amber-500/10",
     textoBadge: "text-amber-700 dark:text-amber-300",
     bordaBadge: "border-amber-500/20",
-    icone: <Clock size={14} />,
+    icone: <Clock size={13} />,
     label: "Pendente",
   },
   Confirmado: {
@@ -162,7 +174,7 @@ const statusConfig: Record<
     bgBadge: "bg-blue-500/10",
     textoBadge: "text-blue-700 dark:text-blue-300",
     bordaBadge: "border-blue-500/20",
-    icone: <CheckCircle2 size={14} />,
+    icone: <CheckCircle2 size={13} />,
     label: "Confirmado",
   },
   Finalizado: {
@@ -170,7 +182,7 @@ const statusConfig: Record<
     bgBadge: "bg-emerald-500/10",
     textoBadge: "text-emerald-700 dark:text-emerald-300",
     bordaBadge: "border-emerald-500/20",
-    icone: <ShieldCheck size={14} />,
+    icone: <ShieldCheck size={13} />,
     label: "Finalizado",
   },
   Cancelado: {
@@ -178,7 +190,7 @@ const statusConfig: Record<
     bgBadge: "bg-rose-500/10",
     textoBadge: "text-rose-700 dark:text-rose-300",
     bordaBadge: "border-rose-500/20",
-    icone: <XCircle size={14} />,
+    icone: <XCircle size={13} />,
     label: "Cancelado",
   },
 };
@@ -192,12 +204,10 @@ function DashboardConteudo() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  // Estado de loading individual por linha para evitar concorrência / duplo clique
-  const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
-
-  // Filtros e controles visuais
-  const [periodoFiltro, setPeriodoFiltro] = useState<"hoje" | "semana" | "todos">("hoje");
+  // Filtros e controles de ordenação
+  const [periodoFiltro, setPeriodoFiltro] = useState<"todos" | "hoje" | "semana">("todos");
   const [statusFiltro, setStatusFiltro] = useState<"todos" | Status>("todos");
+  const [ordenacao, setOrdenacao] = useState<"recentes" | "antigos" | "nome">("recentes");
   const [busca, setBusca] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"cards" | "tabela">("cards");
 
@@ -216,15 +226,11 @@ function DashboardConteudo() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Estados dos modais de detalhes e edição
-  const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<Agendamento | null>(null);
+  // Estado do Modal Unificado de Edição
   const [agendamentoParaEditar, setAgendamentoParaEditar] = useState<Agendamento | null>(null);
-  const [modalEditarAberto, setModalEditarAberto] = useState(false);
 
-  const handleEditar = (ag: Agendamento) => {
-    setAgendamentoDetalhes(null);
+  const handleAbrirEdicao = (ag: Agendamento) => {
     setAgendamentoParaEditar(ag);
-    setModalEditarAberto(true);
   };
 
   const handleExcluir = async (id: string) => {
@@ -246,6 +252,7 @@ function DashboardConteudo() {
       console.error("Erro ao excluir agendamento:", err);
       exibirToast("Erro ao remover agendamento.", "error");
     }
+    setAgendamentoParaEditar(null);
   };
 
   const handleSalvarEdicao = async (editado: AgendamentoItem) => {
@@ -255,7 +262,7 @@ function DashboardConteudo() {
       return;
     }
     setAgendamentos((prev) =>
-      prev.map((a) => (a.id === editado.id ? { ...a, ...editado } : a))
+      prev.map((a) => (a.id === editado.id ? ({ ...a, ...editado } as Agendamento) : a))
     );
     try {
       // 🛡️ Trava Dupla contra IDOR
@@ -271,6 +278,7 @@ function DashboardConteudo() {
           horario: editado.horario,
           data_hora_agendamento: dataHoraIso,
           status: editado.status,
+          observacoes: editado.observacoes || null,
         })
         .eq("id", editado.id)
         .eq("empresa_id", profissional.id);
@@ -280,7 +288,6 @@ function DashboardConteudo() {
       exibirToast("Falha ao salvar alterações.", "error");
     }
     setAgendamentoParaEditar(null);
-    setModalEditarAberto(false);
   };
 
   // 🛡️ Listagem Segura com filtro estrito .eq('empresa_id', profissional.id)
@@ -346,92 +353,59 @@ function DashboardConteudo() {
     };
   }, [profissional?.id, servicos]);
 
-  // 🛡️ Mutação de Status Segura com Trava Dupla contra IDOR e Guard Clause
-  const handleStatus = async (id: string, novoStatus: Status) => {
-    // 🛡️ 1. Guard Clause Estrita: Sanidade do contexto do profissional
-    if (!profissional?.id) {
-      console.error("[Segurança] Contexto da empresa ausente ao atualizar status.");
-      return;
-    }
-
-    // 🛡️ 2. Feedback Visual & Trava contra Duplo Clique / Concorrência
-    if (statusLoadingId) return;
-    setStatusLoadingId(id);
-
-    const agendamentoAnterior = agendamentos.find((a) => a.id === id);
-
-    // Atualização otimista imediata na UI
-    setAgendamentos((prev) =>
-      prev.map((ag) => (ag.id === id ? { ...ag, status: novoStatus } : ag))
-    );
-
-    try {
-      // 🛡️ 3. Trava Dupla de Escopo contra IDOR: .eq('id', id).eq('empresa_id', profissional.id)
-      const { error } = await supabase
-        .from("agendamentos")
-        .update({ status: novoStatus })
-        .eq("id", id)
-        .eq("empresa_id", profissional.id);
-
-      if (error) {
-        console.error("Erro ao atualizar status do agendamento:", error);
-        // Rollback se falhar
-        if (agendamentoAnterior) {
-          setAgendamentos((prev) =>
-            prev.map((ag) => (ag.id === id ? agendamentoAnterior : ag))
-          );
-        }
-        exibirToast("Erro ao alterar o status da consulta.", "error");
-      } else {
-        exibirToast(`Status alterado para "${novoStatus}" com sucesso!`, "success");
-      }
-    } catch (err) {
-      console.error("Erro inesperado ao atualizar status:", err);
-      if (agendamentoAnterior) {
-        setAgendamentos((prev) =>
-          prev.map((ag) => (ag.id === id ? agendamentoAnterior : ag))
-        );
-      }
-      exibirToast("Falha de conexão ao atualizar status.", "error");
-    } finally {
-      setStatusLoadingId(null);
-    }
-  };
-
-  // Filtros em Memória (Período + Status + Busca)
+  // Filtros em Memória (Período + Status + Busca) e Ordenação
   const agendamentosFiltrados = useMemo(() => {
-    const hojeStr = format(new Date(), "yyyy-MM-dd");
+    let lista = [...agendamentos];
 
-    return agendamentos.filter((ag) => {
-      // 1. Filtro de Período
-      if (periodoFiltro === "hoje") {
-        if (ag.data !== hojeStr) return false;
-      } else if (periodoFiltro === "semana") {
+    // 1. Filtro de Período
+    if (periodoFiltro === "hoje") {
+      const hojeStr = format(new Date(), "yyyy-MM-dd");
+      lista = lista.filter((a) => a.data === hojeStr);
+    } else if (periodoFiltro === "semana") {
+      lista = lista.filter((a) => {
         try {
-          const dataObj = parseISO(ag.data);
-          if (!isThisWeek(dataObj, { weekStartsOn: 1 })) return false;
+          return isThisWeek(parseISO(a.data), { weekStartsOn: 1 });
         } catch {
           return false;
         }
-      }
+      });
+    }
 
-      // 2. Filtro de Status
-      if (statusFiltro !== "todos" && ag.status !== statusFiltro) {
-        return false;
-      }
+    // 2. Filtro de Status
+    if (statusFiltro !== "todos") {
+      lista = lista.filter((a) => a.status === statusFiltro);
+    }
 
-      // 3. Filtro de Busca
-      if (busca.trim()) {
-        const termo = busca.toLowerCase();
-        const matchNome = ag.nomeCliente.toLowerCase().includes(termo);
-        const matchTel = (ag.telefone || "").includes(termo);
-        const matchServ = ag.servico.toLowerCase().includes(termo);
-        if (!matchNome && !matchTel && !matchServ) return false;
-      }
+    // 3. Busca por Nome ou Telefone ou Serviço
+    if (busca.trim()) {
+      const termo = busca.trim().toLowerCase();
+      const termoNum = busca.replace(/\D/g, "");
+      lista = lista.filter((a) => {
+        const matchNome = a.nomeCliente.toLowerCase().includes(termo);
+        const matchServico = a.servico.toLowerCase().includes(termo);
+        const matchTel = a.telefone
+          ? a.telefone.replace(/\D/g, "").includes(termoNum)
+          : false;
+        return matchNome || matchServico || (termoNum.length > 0 && matchTel);
+      });
+    }
 
-      return true;
+    // 4. Classificar por
+    lista.sort((a, b) => {
+      if (ordenacao === "nome") {
+        return a.nomeCliente.localeCompare(b.nomeCliente, "pt-BR");
+      }
+      const dtA = `${a.data}T${a.horario}:00`;
+      const dtB = `${b.data}T${b.horario}:00`;
+      if (ordenacao === "antigos") {
+        return dtA.localeCompare(dtB);
+      }
+      // "recentes" (Data decrescente)
+      return dtB.localeCompare(dtA);
     });
-  }, [agendamentos, periodoFiltro, statusFiltro, busca]);
+
+    return lista;
+  }, [agendamentos, periodoFiltro, statusFiltro, busca, ordenacao]);
 
   // Contadores dinâmicos de acordo com o período selecionado
   const contadores = useMemo(() => {
@@ -456,6 +430,19 @@ function DashboardConteudo() {
       cancelados: doPeriodo.filter((a) => a.status === "Cancelado").length,
     };
   }, [agendamentos, periodoFiltro]);
+
+  const limparFiltros = () => {
+    setBusca("");
+    setStatusFiltro("todos");
+    setPeriodoFiltro("todos");
+    setOrdenacao("recentes");
+  };
+
+  const temFiltroAtivo =
+    busca.trim() !== "" ||
+    statusFiltro !== "todos" ||
+    periodoFiltro !== "todos" ||
+    ordenacao !== "recentes";
 
   return (
     <div className="space-y-8 pb-14 relative">
@@ -482,7 +469,7 @@ function DashboardConteudo() {
             <span>{toast.texto}</span>
             <button
               onClick={() => setToast(null)}
-              className="ml-2 text-muted-foreground hover:text-foreground p-0.5"
+              className="ml-2 text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
             >
               <X size={14} />
             </button>
@@ -490,60 +477,44 @@ function DashboardConteudo() {
         )}
       </AnimatePresence>
 
-      {/* Modal de Detalhes do Agendamento */}
+      {/* ── Modal Unificado de Edição de Agendamento ── */}
       <AnimatePresence>
-        {agendamentoDetalhes && (
-          <ModalDetalhesAgendamento
-            agendamento={agendamentoDetalhes as any}
-            onFechar={() => setAgendamentoDetalhes(null)}
-            onEditar={(ag) => handleEditar(ag as Agendamento)}
-            onExcluir={handleExcluir}
-            onAtualizarStatus={handleStatus}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Modal de Edição */}
-      <AnimatePresence>
-        {modalEditarAberto && (
-          <ModalNovoAgendamento
-            aberto={modalEditarAberto}
-            data={new Date()}
-            agendamentoInicial={agendamentoParaEditar as any}
+        {agendamentoParaEditar && (
+          <ModalEdicaoAgendamento
+            aberto={Boolean(agendamentoParaEditar)}
+            agendamento={agendamentoParaEditar}
             empresaId={profissional?.id}
-            onFechar={() => {
-              setModalEditarAberto(false);
-              setAgendamentoParaEditar(null);
-            }}
-            onSalvar={handleSalvarEdicao}
             servicos={servicos as any}
             horariosDisponiveis={
               profissional?.horariosDisponiveis ?? [
                 "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
               ]
             }
+            onFechar={() => setAgendamentoParaEditar(null)}
+            onSalvar={handleSalvarEdicao}
+            onExcluir={handleExcluir}
           />
         )}
       </AnimatePresence>
 
-      {/* ── Cabeçalho do Painel com Contadores Dinâmicos ── */}
-      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end border-b border-border/40 pb-7 gap-6">
+      {/* ── Cabeçalho Principal com Métricas ── */}
+      <header className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
         <div>
-          <div className="flex items-center gap-2 text-primary font-body font-semibold text-xs mb-1.5 uppercase tracking-wider">
-            <CalendarDays size={15} />
-            <span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-body font-bold bg-primary/10 text-primary border border-primary/20">
+              <CalendarDays size={13} />
               {periodoFiltro === "hoje"
                 ? `Hoje • ${format(new Date(), "dd 'de' MMMM", { locale: ptBR })}`
                 : periodoFiltro === "semana"
                 ? "Agendamentos desta semana"
-                : "Visão Geral de Agendamentos"}
+                : "Histórico Completo de Agendamentos"}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight text-foreground">
             Gestão de Agendamentos
           </h1>
           <p className="text-muted-foreground font-body text-xs sm:text-sm font-medium mt-1">
-            Acompanhe, aprove e altere o status das consultas dos seus clientes em tempo real.
+            Histórico completo de consultas: pesquise, filtre e edite atendimentos com facilidade.
           </p>
         </div>
 
@@ -553,20 +524,20 @@ function DashboardConteudo() {
           <button
             type="button"
             onClick={() => setStatusFiltro(statusFiltro === "Pendente" ? "todos" : "Pendente")}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 shadow-soft cursor-pointer ${
+            className={`p-3.5 rounded-2xl border transition-all text-left flex items-center gap-3 shadow-soft cursor-pointer ${
               statusFiltro === "Pendente"
                 ? "bg-amber-500/15 border-amber-500/40 ring-2 ring-amber-500/20"
                 : "bg-card/70 border-border/50 hover:bg-card"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <Clock size={20} />
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <Clock size={18} />
             </div>
             <div>
-              <span className="text-xl font-display font-bold text-foreground leading-none block">
+              <span className="text-lg font-display font-bold text-foreground leading-none block">
                 {contadores.pendentes}
               </span>
-              <span className="text-[11px] font-body font-bold text-muted-foreground uppercase tracking-wider">
+              <span className="text-[10px] font-body font-bold text-muted-foreground uppercase tracking-wider">
                 Pendentes
               </span>
             </div>
@@ -576,20 +547,20 @@ function DashboardConteudo() {
           <button
             type="button"
             onClick={() => setStatusFiltro(statusFiltro === "Confirmado" ? "todos" : "Confirmado")}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 shadow-soft cursor-pointer ${
+            className={`p-3.5 rounded-2xl border transition-all text-left flex items-center gap-3 shadow-soft cursor-pointer ${
               statusFiltro === "Confirmado"
                 ? "bg-blue-500/15 border-blue-500/40 ring-2 ring-blue-500/20"
                 : "bg-card/70 border-border/50 hover:bg-card"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={20} />
+            <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={18} />
             </div>
             <div>
-              <span className="text-xl font-display font-bold text-foreground leading-none block">
+              <span className="text-lg font-display font-bold text-foreground leading-none block">
                 {contadores.confirmados}
               </span>
-              <span className="text-[11px] font-body font-bold text-muted-foreground uppercase tracking-wider">
+              <span className="text-[10px] font-body font-bold text-muted-foreground uppercase tracking-wider">
                 Confirmados
               </span>
             </div>
@@ -599,20 +570,20 @@ function DashboardConteudo() {
           <button
             type="button"
             onClick={() => setStatusFiltro(statusFiltro === "Finalizado" ? "todos" : "Finalizado")}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 shadow-soft cursor-pointer ${
+            className={`p-3.5 rounded-2xl border transition-all text-left flex items-center gap-3 shadow-soft cursor-pointer ${
               statusFiltro === "Finalizado"
                 ? "bg-emerald-500/15 border-emerald-500/40 ring-2 ring-emerald-500/20"
                 : "bg-card/70 border-border/50 hover:bg-card"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <ShieldCheck size={20} />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <ShieldCheck size={18} />
             </div>
             <div>
-              <span className="text-xl font-display font-bold text-foreground leading-none block">
+              <span className="text-lg font-display font-bold text-foreground leading-none block">
                 {contadores.finalizados}
               </span>
-              <span className="text-[11px] font-body font-bold text-muted-foreground uppercase tracking-wider">
+              <span className="text-[10px] font-body font-bold text-muted-foreground uppercase tracking-wider">
                 Finalizados
               </span>
             </div>
@@ -622,20 +593,20 @@ function DashboardConteudo() {
           <button
             type="button"
             onClick={() => setStatusFiltro("todos")}
-            className={`p-4 rounded-2xl border transition-all text-left flex items-center gap-3.5 shadow-soft cursor-pointer ${
+            className={`p-3.5 rounded-2xl border transition-all text-left flex items-center gap-3 shadow-soft cursor-pointer ${
               statusFiltro === "todos"
                 ? "bg-primary/10 border-primary/30 ring-2 ring-primary/20"
                 : "bg-card/70 border-border/50 hover:bg-card"
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
-              <User size={20} />
+            <div className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+              <User size={18} />
             </div>
             <div>
-              <span className="text-xl font-display font-bold text-foreground leading-none block">
+              <span className="text-lg font-display font-bold text-foreground leading-none block">
                 {contadores.total}
               </span>
-              <span className="text-[11px] font-body font-bold text-muted-foreground uppercase tracking-wider">
+              <span className="text-[10px] font-body font-bold text-muted-foreground uppercase tracking-wider">
                 Total
               </span>
             </div>
@@ -643,125 +614,190 @@ function DashboardConteudo() {
         </div>
       </header>
 
-      {/* ── Barra de Controles: Filtros de Período, Busca e Modo de Visualização ── */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-card/60 p-4 rounded-2xl border border-border/40 shadow-soft">
-        {/* Toggle de Período */}
-        <div className="flex items-center gap-1.5 bg-secondary/50 p-1 rounded-xl border border-border/30 shrink-0">
-          <button
-            type="button"
-            onClick={() => setPeriodoFiltro("hoje")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
-              periodoFiltro === "hoje"
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Hoje
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodoFiltro("semana")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
-              periodoFiltro === "semana"
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Esta Semana
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodoFiltro("todos")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-body font-bold transition-all cursor-pointer ${
-              periodoFiltro === "todos"
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Todos
-          </button>
-        </div>
-
-        {/* Input de Busca */}
-        <div className="relative flex-1 max-w-md">
+      {/* ── Barra de Controle Superior: Busca, Filtro de Status, Ordenação e Período ── */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 bg-card/70 p-4 rounded-3xl border border-border/50 shadow-soft backdrop-blur-sm">
+        {/* 1. Input de Busca em Tempo Real */}
+        <div className="relative flex-1 min-w-[240px]">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por paciente, telefone ou serviço..."
-            className="w-full pl-9 pr-8 py-2 rounded-xl bg-background border border-border/60 text-xs font-body text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground/60"
+            placeholder="Buscar por nome do paciente ou telefone..."
+            className="w-full pl-9 pr-8 py-2.5 rounded-2xl bg-background border border-border text-xs sm:text-sm font-body text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground/60"
           />
           {busca && (
             <button
               type="button"
               onClick={() => setBusca("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
+              title="Limpar busca"
             >
               <X size={14} />
             </button>
           )}
         </div>
 
-        {/* Alternador de Visualização: Cards vs Tabela */}
-        <div className="flex items-center gap-1.5 bg-secondary/50 p-1 rounded-xl border border-border/30 self-end md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setModoVisualizacao("cards")}
-            title="Visualização em Cards"
-            className={`p-1.5 rounded-lg text-xs font-body transition-all cursor-pointer ${
-              modoVisualizacao === "cards"
-                ? "bg-background text-primary shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <LayoutGrid size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setModoVisualizacao("tabela")}
-            title="Visualização em Tabela"
-            className={`p-1.5 rounded-lg text-xs font-body transition-all cursor-pointer ${
-              modoVisualizacao === "tabela"
-                ? "bg-background text-primary shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <TableIcon size={16} />
-          </button>
+        {/* 2. Select Filtrar por Status */}
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-[150px]">
+            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <select
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value as any)}
+              className="w-full pl-8 pr-3 py-2.5 rounded-2xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all cursor-pointer"
+              title="Filtrar por Status"
+            >
+              <option value="todos">Todos os Status</option>
+              <option value="Confirmado">Confirmados</option>
+              <option value="Pendente">Pendentes</option>
+              <option value="Finalizado">Finalizados</option>
+              <option value="Cancelado">Cancelados</option>
+            </select>
+          </div>
+
+          {/* 3. Select Classificar por (Ordenação) */}
+          <div className="relative min-w-[180px]">
+            <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <select
+              value={ordenacao}
+              onChange={(e) => setOrdenacao(e.target.value as any)}
+              className="w-full pl-8 pr-3 py-2.5 rounded-2xl bg-background border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all cursor-pointer"
+              title="Classificar agendamentos"
+            >
+              <option value="recentes">Mais recentes primeiro</option>
+              <option value="antigos">Mais antigos primeiro</option>
+              <option value="nome">Nome do paciente (A-Z)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 4. Filtro Rápido de Período e Modo de Exibição */}
+        <div className="flex items-center justify-between lg:justify-end gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-border/30">
+          {/* Toggle de Período */}
+          <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-2xl border border-border/40 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPeriodoFiltro("todos")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-body font-bold transition-all cursor-pointer ${
+                periodoFiltro === "todos"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodoFiltro("hoje")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-body font-bold transition-all cursor-pointer ${
+                periodoFiltro === "hoje"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodoFiltro("semana")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-body font-bold transition-all cursor-pointer ${
+                periodoFiltro === "semana"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Semana
+            </button>
+          </div>
+
+          {/* Alternador de Modo: Cards vs Tabela */}
+          <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-2xl border border-border/40 shrink-0">
+            <button
+              type="button"
+              onClick={() => setModoVisualizacao("cards")}
+              title="Visualização em Cards"
+              className={`p-2 rounded-xl text-xs font-body transition-all cursor-pointer ${
+                modoVisualizacao === "cards"
+                  ? "bg-background text-primary shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoVisualizacao("tabela")}
+              title="Visualização em Tabela"
+              className={`p-2 rounded-xl text-xs font-body transition-all cursor-pointer ${
+                modoVisualizacao === "tabela"
+                  ? "bg-background text-primary shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <TableIcon size={15} />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── Informação de Resultados Filtrados / Botão Limpar ── */}
+      {temFiltroAtivo && (
+        <div className="flex items-center justify-between text-xs font-body text-muted-foreground px-1">
+          <span>
+            Exibindo <strong>{agendamentosFiltrados.length}</strong> de{" "}
+            <strong>{agendamentos.length}</strong> agendamentos
+          </span>
+          <button
+            type="button"
+            onClick={limparFiltros}
+            className="text-primary hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw size={12} />
+            Limpar filtros
+          </button>
+        </div>
+      )}
 
       {/* ── Conteúdo Principal: Cards ou Tabela ── */}
       <section>
         {carregando ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Loader2 size={36} className="animate-spin text-primary mb-3" />
-            <p className="font-body text-sm font-semibold">Carregando consultas com segurança...</p>
+            <p className="font-body text-sm font-semibold">Carregando histórico de agendamentos...</p>
           </div>
         ) : agendamentosFiltrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 bg-card/40 rounded-3xl border border-border/30 text-center p-8">
+          <div className="flex flex-col items-center justify-center py-16 bg-card/40 rounded-3xl border border-border/40 text-center p-8">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3.5">
               <CalendarOff size={28} />
             </div>
             <h3 className="font-display font-bold text-lg text-foreground">
               Nenhum agendamento encontrado
             </h3>
-            <p className="font-body text-xs sm:text-sm text-muted-foreground max-w-md mt-1">
+            <p className="font-body text-xs sm:text-sm text-muted-foreground max-w-md mt-1 mb-4">
               {busca
-                ? `Nenhum agendamento corresponde ao termo "${busca}".`
+                ? `Nenhum agendamento corresponde à pesquisa "${busca}".`
                 : statusFiltro !== "todos"
-                ? `Não há agendamentos com status "${statusFiltro}" no período selecionado.`
-                : "Não há consultas registradas para este período."}
+                ? `Não há agendamentos com status "${statusFiltro}" no filtro atual.`
+                : "Não há consultas registradas para este critério de busca."}
             </p>
+            {temFiltroAtivo && (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="px-4 py-2 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-body font-bold text-xs transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <RotateCcw size={13} />
+                <span>Limpar todos os filtros</span>
+              </button>
+            )}
           </div>
         ) : modoVisualizacao === "cards" ? (
-          /* ── MODO 1: CARDS MODERNOS ── */
+          /* ── MODO 1: CARDS HISTÓRICOS MODERNOS ── */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             <AnimatePresence mode="popLayout">
               {agendamentosFiltrados.map((ag) => {
                 const config = statusConfig[ag.status];
-                const estaCarregandoLinha = statusLoadingId === ag.id;
 
                 return (
                   <motion.div
@@ -773,17 +809,17 @@ function DashboardConteudo() {
                     transition={{ duration: 0.25 }}
                     className={`flex flex-col p-5 rounded-3xl bg-card border-l-4 ${config.corBorda} border border-border/50 shadow-floating relative transition-all group hover:shadow-lg`}
                   >
-                    {/* Topo do Card */}
-                    <div className="flex items-start justify-between gap-3 mb-4">
+                    {/* Topo do Card: Paciente e Badge de Status */}
+                    <div className="flex items-start justify-between gap-3 mb-3.5">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-11 h-11 rounded-2xl bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-base shrink-0 shadow-inner">
                           {ag.nomeCliente.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <h3
-                            onClick={() => setAgendamentoDetalhes(ag)}
+                            onClick={() => handleAbrirEdicao(ag)}
                             className="font-display font-bold text-base text-foreground hover:text-primary transition-colors truncate cursor-pointer leading-snug"
-                            title="Clique para ver detalhes e editar"
+                            title="Clique para editar agendamento"
                           >
                             {ag.nomeCliente}
                           </h3>
@@ -793,48 +829,27 @@ function DashboardConteudo() {
                         </div>
                       </div>
 
-                      {/* Badge do Status Atual & Affordance de Edição no Hover */}
-                      <div className="relative shrink-0 flex items-center justify-end">
-                        {/* Badge Visível por Padrão */}
-                        <div
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold border transition-all duration-200 group-hover:opacity-0 group-hover:scale-90 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
-                        >
-                          {estaCarregandoLinha ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            config.icone
-                          )}
-                          <span>{config.label}</span>
-                        </div>
-
-                        {/* Botão de Lápis / Editar exibido no Hover do Card */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAgendamentoDetalhes(ag);
-                          }}
-                          title="Editar agendamento completo"
-                          className="absolute inset-0 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold bg-primary text-primary-foreground shadow-sm opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 hover:brightness-110 active:scale-95 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
-                        >
-                          <Pencil size={12} className="shrink-0 stroke-[2.5]" />
-                          <span>Editar</span>
-                        </button>
+                      {/* Badge de Status */}
+                      <div
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold border shrink-0 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
+                      >
+                        {config.icone}
+                        <span>{config.label}</span>
                       </div>
                     </div>
 
                     {/* Informações: Data, Hora e Telefone */}
-                    <div className="space-y-1.5 py-2 border-y border-border/25 my-1 text-xs font-body">
+                    <div className="space-y-2 py-2.5 border-y border-border/25 my-1 text-xs font-body">
                       <div className="flex items-center justify-between text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <CalendarIcon size={13} className="text-primary" />
-                          <span>
+                          <span className="font-medium">
                             {ag.data === format(new Date(), "yyyy-MM-dd")
                               ? "Hoje"
                               : format(parseISO(ag.data), "dd/MM/yyyy")}
                           </span>
                         </span>
-                        <span className="flex items-center gap-1 font-bold text-foreground bg-secondary/80 px-2 py-0.5 rounded-lg">
+                        <span className="flex items-center gap-1 font-bold text-foreground bg-secondary/80 px-2.5 py-0.5 rounded-lg">
                           <Clock size={12} className="text-primary" />
                           {ag.horario}
                         </span>
@@ -858,78 +873,29 @@ function DashboardConteudo() {
                           </a>
                         </div>
                       )}
+
+                      {/* Observações Clínicas (se houver) */}
+                      {ag.observacoes && (
+                        <div className="pt-1 text-[11px] text-muted-foreground bg-secondary/30 p-2 rounded-xl border border-border/20 flex items-start gap-1.5">
+                          <FileText size={12} className="text-primary shrink-0 mt-0.5" />
+                          <span className="line-clamp-2">{ag.observacoes}</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* 🛡️ Ações Rápidas de Alteração de Status (Trava Dupla IDOR) */}
-                    <div className="pt-3 mt-auto flex flex-col gap-2">
-                      <span className="text-[10px] font-body font-bold uppercase tracking-wider text-muted-foreground/80">
-                        Alterar Status:
-                      </span>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {/* 1. Pendente */}
-                        <button
-                          type="button"
-                          disabled={estaCarregandoLinha || ag.status === "Pendente"}
-                          onClick={() => handleStatus(ag.id, "Pendente")}
-                          title="Definir como Pendente"
-                          className={`py-2 px-1 rounded-xl text-[11px] font-body font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed ${
-                            ag.status === "Pendente"
-                              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 font-extrabold ring-1 ring-amber-500/40"
-                              : "bg-secondary/60 hover:bg-amber-500/10 hover:text-amber-600 text-muted-foreground"
-                          }`}
-                        >
-                          <Clock size={14} />
-                          <span className="truncate text-[10px]">Pendente</span>
-                        </button>
-
-                        {/* 2. Confirmado */}
-                        <button
-                          type="button"
-                          disabled={estaCarregandoLinha || ag.status === "Confirmado"}
-                          onClick={() => handleStatus(ag.id, "Confirmado")}
-                          title="Confirmar Agendamento"
-                          className={`py-2 px-1 rounded-xl text-[11px] font-body font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed ${
-                            ag.status === "Confirmado"
-                              ? "bg-blue-500/20 text-blue-700 dark:text-blue-300 font-extrabold ring-1 ring-blue-500/40"
-                              : "bg-secondary/60 hover:bg-blue-500/10 hover:text-blue-600 text-muted-foreground"
-                          }`}
-                        >
-                          <Check size={14} />
-                          <span className="truncate text-[10px]">Confirmar</span>
-                        </button>
-
-                        {/* 3. Finalizado */}
-                        <button
-                          type="button"
-                          disabled={estaCarregandoLinha || ag.status === "Finalizado"}
-                          onClick={() => handleStatus(ag.id, "Finalizado")}
-                          title="Finalizar Consulta Realizada"
-                          className={`py-2 px-1 rounded-xl text-[11px] font-body font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed ${
-                            ag.status === "Finalizado"
-                              ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold ring-1 ring-emerald-500/40"
-                              : "bg-secondary/60 hover:bg-emerald-500/10 hover:text-emerald-600 text-muted-foreground"
-                          }`}
-                        >
-                          <ShieldCheck size={14} />
-                          <span className="truncate text-[10px]">Finalizar</span>
-                        </button>
-
-                        {/* 4. Cancelado */}
-                        <button
-                          type="button"
-                          disabled={estaCarregandoLinha || ag.status === "Cancelado"}
-                          onClick={() => handleStatus(ag.id, "Cancelado")}
-                          title="Cancelar Agendamento"
-                          className={`py-2 px-1 rounded-xl text-[11px] font-body font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed ${
-                            ag.status === "Cancelado"
-                              ? "bg-rose-500/20 text-rose-700 dark:text-rose-300 font-extrabold ring-1 ring-rose-500/40"
-                              : "bg-secondary/60 hover:bg-rose-500/10 hover:text-rose-600 text-muted-foreground"
-                          }`}
-                        >
-                          <X size={14} />
-                          <span className="truncate text-[10px]">Cancelar</span>
-                        </button>
-                      </div>
+                    {/* Botão de Ação Único e Elegante: Editar / Ver Detalhes */}
+                    <div className="pt-3 mt-auto">
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleAbrirEdicao(ag)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-secondary/80 hover:bg-primary hover:text-primary-foreground text-foreground font-body font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer group shadow-2xs"
+                        title="Editar agendamento completo"
+                      >
+                        <Pencil size={13} className="text-primary group-hover:text-primary-foreground transition-colors" />
+                        <span>Editar / Ver Detalhes</span>
+                      </motion.button>
                     </div>
                   </motion.div>
                 );
@@ -937,7 +903,7 @@ function DashboardConteudo() {
             </AnimatePresence>
           </div>
         ) : (
-          /* ── MODO 2: TABELA GERENCIAL MODERNA ── */
+          /* ── MODO 2: TABELA HISTÓRICA MODERNA ── */
           <div className="bg-card rounded-3xl border border-border/50 shadow-floating overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -947,13 +913,12 @@ function DashboardConteudo() {
                     <th className="py-4 px-4">Serviço</th>
                     <th className="py-4 px-4">Data & Horário</th>
                     <th className="py-4 px-4">Status</th>
-                    <th className="py-4 px-5 text-right">Ações de Status</th>
+                    <th className="py-4 px-5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/25 font-body text-xs">
                   {agendamentosFiltrados.map((ag) => {
                     const config = statusConfig[ag.status];
-                    const estaCarregandoLinha = statusLoadingId === ag.id;
 
                     return (
                       <tr
@@ -969,8 +934,8 @@ function DashboardConteudo() {
                             <div>
                               <button
                                 type="button"
-                                onClick={() => setAgendamentoDetalhes(ag)}
-                                className="font-display font-bold text-foreground hover:text-primary transition-colors text-sm text-left block"
+                                onClick={() => handleAbrirEdicao(ag)}
+                                className="font-display font-bold text-foreground hover:text-primary transition-colors text-sm text-left block cursor-pointer"
                               >
                                 {ag.nomeCliente}
                               </button>
@@ -985,7 +950,14 @@ function DashboardConteudo() {
 
                         {/* Serviço */}
                         <td className="py-3.5 px-4 font-semibold text-foreground">
-                          {ag.servico}
+                          <div>
+                            <span>{ag.servico}</span>
+                            {ag.observacoes && (
+                              <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                                {ag.observacoes}
+                              </p>
+                            )}
+                          </div>
                         </td>
 
                         {/* Data & Horário */}
@@ -1003,95 +975,29 @@ function DashboardConteudo() {
                           </div>
                         </td>
 
-                        {/* Status Atual & Affordance de Edição no Hover */}
+                        {/* Status Atual */}
                         <td className="py-3.5 px-4">
-                          <div className="relative inline-flex items-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all duration-200 group-hover:opacity-0 group-hover:scale-90 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
-                            >
-                              {estaCarregandoLinha ? (
-                                <Loader2 size={12} className="animate-spin" />
-                              ) : (
-                                config.icone
-                              )}
-                              <span>{config.label}</span>
-                            </span>
-
-                            <button
-                              type="button"
-                              onClick={() => setAgendamentoDetalhes(ag)}
-                              title="Editar agendamento completo"
-                              className="absolute inset-0 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold bg-primary text-primary-foreground shadow-sm opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 hover:brightness-110 active:scale-95 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
-                            >
-                              <Pencil size={12} className="shrink-0 stroke-[2.5]" />
-                              <span>Editar</span>
-                            </button>
-                          </div>
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
+                          >
+                            {config.icone}
+                            <span>{config.label}</span>
+                          </span>
                         </td>
 
-                        {/* 🛡️ Ações Rápidas de Mudança de Status */}
+                        {/* Ação Única: Botão Editar */}
                         <td className="py-3.5 px-5 text-right">
-                          <div className="inline-flex items-center gap-1.5 justify-end">
-                            {/* Botão Confirmar */}
-                            <button
-                              type="button"
-                              disabled={estaCarregandoLinha || ag.status === "Confirmado"}
-                              onClick={() => handleStatus(ag.id, "Confirmado")}
-                              title="Confirmar"
-                              className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                ag.status === "Confirmado"
-                                  ? "bg-blue-500/20 text-blue-700 ring-1 ring-blue-500/40"
-                                  : "hover:bg-blue-500/15 text-muted-foreground hover:text-blue-600 bg-secondary/50"
-                              }`}
-                            >
-                              <Check size={15} />
-                            </button>
-
-                            {/* Botão Finalizar */}
-                            <button
-                              type="button"
-                              disabled={estaCarregandoLinha || ag.status === "Finalizado"}
-                              onClick={() => handleStatus(ag.id, "Finalizado")}
-                              title="Finalizar"
-                              className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                ag.status === "Finalizado"
-                                  ? "bg-emerald-500/20 text-emerald-700 ring-1 ring-emerald-500/40"
-                                  : "hover:bg-emerald-500/15 text-muted-foreground hover:text-emerald-600 bg-secondary/50"
-                              }`}
-                            >
-                              <ShieldCheck size={15} />
-                            </button>
-
-                            {/* Botão Cancelar */}
-                            <button
-                              type="button"
-                              disabled={estaCarregandoLinha || ag.status === "Cancelado"}
-                              onClick={() => handleStatus(ag.id, "Cancelado")}
-                              title="Cancelar"
-                              className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                ag.status === "Cancelado"
-                                  ? "bg-rose-500/20 text-rose-700 ring-1 ring-rose-500/40"
-                                  : "hover:bg-rose-500/15 text-muted-foreground hover:text-rose-600 bg-secondary/50"
-                              }`}
-                            >
-                              <X size={15} />
-                            </button>
-
-                            {/* Botão Voltar para Pendente */}
-                            <button
-                              type="button"
-                              disabled={estaCarregandoLinha || ag.status === "Pendente"}
-                              onClick={() => handleStatus(ag.id, "Pendente")}
-                              title="Reabrir como Pendente"
-                              className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                ag.status === "Pendente"
-                                  ? "bg-amber-500/20 text-amber-700 ring-1 ring-amber-500/40"
-                                  : "hover:bg-amber-500/15 text-muted-foreground hover:text-amber-600 bg-secondary/50"
-                              }`}
-                            >
-                              <Clock size={15} />
-                            </button>
-                          </div>
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleAbrirEdicao(ag)}
+                            title="Editar consulta"
+                            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-secondary/80 hover:bg-primary hover:text-primary-foreground text-foreground font-body font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <Pencil size={12} />
+                            <span>Editar</span>
+                          </motion.button>
                         </td>
                       </tr>
                     );

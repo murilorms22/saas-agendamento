@@ -47,7 +47,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
 import { ModalNovoAgendamento } from "../../components/ModalNovoAgendamento";
-import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
+import { ModalEdicaoAgendamento } from "../../components/ModalEdicaoAgendamento";
 import confetti from "canvas-confetti";
 
 // ──────────────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ interface AgendamentoSemana {
   telefone?: string;
   servico: string;
   status: StatusAgendamento;
+  observacoes?: string;
 }
 
 interface HorarioDia {
@@ -401,7 +402,6 @@ interface VisualizadorAgendaProps {
   onAdicionarAgendamento?: (novo: AgendamentoSemana) => void;
   onAtualizarAgendamento?: (editado: AgendamentoSemana) => void;
   onExcluirAgendamento?: (id: string) => void;
-  onAtualizarStatus?: (id: string, novoStatus: StatusAgendamento) => void;
 }
 
 function VisualizadorAgenda({
@@ -409,7 +409,6 @@ function VisualizadorAgenda({
   onAdicionarAgendamento,
   onAtualizarAgendamento,
   onExcluirAgendamento,
-  onAtualizarStatus,
 }: VisualizadorAgendaProps) {
   const { profissional } = useProfessional();
   const hoje = new Date();
@@ -512,9 +511,7 @@ function VisualizadorAgenda({
   };
 
   const handleEditarAgendamento = (ag: AgendamentoSemana) => {
-    setAgendamentoDetalhes(null);
-    setAgendamentoParaEditar(ag);
-    setModalNovo({ aberto: true, data: parseISO(ag.data) });
+    setAgendamentoDetalhes(ag);
   };
 
   const handleExcluirAgendamento = async (id: string) => {
@@ -642,15 +639,27 @@ function VisualizadorAgenda({
 
   return (
     <div className="space-y-6">
-      {/* ── Modal de Detalhes do Agendamento (com lápis de edição e confirmação de exclusão) ── */}
+      {/* ── Modal Unificado de Edição de Agendamento ── */}
       <AnimatePresence>
         {agendamentoDetalhes && (
-          <ModalDetalhesAgendamento
+          <ModalEdicaoAgendamento
+            aberto={Boolean(agendamentoDetalhes)}
             agendamento={agendamentoDetalhes}
+            empresaId={profissional?.id}
+            servicos={profissional?.servicos ?? []}
+            horariosDisponiveis={
+              profissional?.horariosDisponiveis ?? [
+                "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
+              ]
+            }
             onFechar={() => setAgendamentoDetalhes(null)}
-            onEditar={(ag) => handleEditarAgendamento(ag as AgendamentoSemana)}
+            onSalvar={async (editado) => {
+              if (onAtualizarAgendamento) {
+                onAtualizarAgendamento(editado as AgendamentoSemana);
+              }
+              setAgendamentoDetalhes(null);
+            }}
             onExcluir={handleExcluirAgendamento}
-            onAtualizarStatus={onAtualizarStatus}
           />
         )}
       </AnimatePresence>
@@ -1955,6 +1964,7 @@ function AgendaConteudo() {
           horario: editado.horario,
           data_hora_agendamento: dataHoraIso,
           status: editado.status,
+          observacoes: editado.observacoes || null,
         })
         .eq("id", editado.id)
         .eq("empresa_id", profissional.id);
@@ -1981,29 +1991,6 @@ function AgendaConteudo() {
         .eq("empresa_id", profissional.id);
     } catch (err) {
       console.error("Erro ao excluir agendamento do Supabase:", err);
-    }
-  };
-
-  const handleAtualizarStatus = async (id: string, novoStatus: StatusAgendamento) => {
-    if (!profissional?.id) {
-      console.error("[Segurança] Contexto da empresa ausente ao atualizar status.");
-      return;
-    }
-
-    // Atualização otimista
-    setAgendamentos((prev) =>
-      prev.map((ag) => (ag.id === id ? { ...ag, status: novoStatus } : ag))
-    );
-
-    // Persiste no Supabase com trava de escopo
-    try {
-      await supabase
-        .from("agendamentos")
-        .update({ status: novoStatus })
-        .eq("id", id)
-        .eq("empresa_id", profissional.id);
-    } catch (err) {
-      console.error("Erro ao atualizar status no Supabase:", err);
     }
   };
 
@@ -2080,7 +2067,6 @@ function AgendaConteudo() {
               onAdicionarAgendamento={handleAdicionarAgendamento}
               onAtualizarAgendamento={handleAtualizarAgendamento}
               onExcluirAgendamento={handleExcluirAgendamento}
-              onAtualizarStatus={handleAtualizarStatus}
             />
           </motion.div>
         )}
