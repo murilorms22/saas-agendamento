@@ -1,9 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipos & Interfaces
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface WebhookRecord {
   id: string | number;
   empresa_id?: string;
@@ -44,36 +40,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers: Sanitização de Telefone & Formatação
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Sanitiza números de telefone brasileiros para o padrão internacional:
- * 55 + DDD (2 dígitos) + Número (8 ou 9 dígitos) -> Somente números (12 ou 13 dígitos)
- */
 function sanitizarTelefone(tel?: string | null): string | null {
   if (!tel) return null;
   const digitos = tel.replace(/\D/g, "");
   if (digitos.length < 10) return null;
 
-  // Se já tiver DDI 55 no início e tamanho apropriado (12 ou 13 dígitos)
   if (digitos.startsWith("55") && (digitos.length === 12 || digitos.length === 13)) {
     return digitos;
   }
 
-  // Se tiver DDD + Número (10 ou 11 dígitos), adiciona DDI 55
   if (digitos.length === 10 || digitos.length === 11) {
     return `55${digitos}`;
   }
 
-  // Fallback se tiver outro tamanho plausível
   return digitos;
 }
 
-/**
- * Formata datas YYYY-MM-DD para DD/MM/YYYY
- */
 function formatarData(dataStr?: string | null): string {
   if (!dataStr) return "Data a confirmar";
   try {
@@ -82,13 +64,9 @@ function formatarData(dataStr?: string | null): string {
     if (ano && mes && dia) {
       return `${dia}/${mes}/${ano}`;
     }
-  } catch {}
+  } catch { }
   return dataStr;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Função de Envio via Evolution API
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function enviarMensagemWhatsApp({
   apiUrl,
@@ -141,39 +119,25 @@ async function enviarMensagemWhatsApp({
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Deno Serve (Edge Function Handler)
-// ─────────────────────────────────────────────────────────────────────────────
-
 Deno.serve(async (req: Request) => {
-  // Trata requisições OPTIONS (CORS preflight)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 1. Leitura de Variáveis de Ambiente
     const EVOLUTION_API_URL =
       Deno.env.get("EVOLUTION_API_URL") ||
       "https://evolution-api-production-a2b26.up.railway.app";
     const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
     const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "praxis";
 
+    // O Supabase injeta essas variáveis nativamente em Edge Functions
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-    const SUPABASE_SERVICE_ROLE_KEY =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-    if (!EVOLUTION_API_KEY) {
-      console.warn(
-        "[Alerta] EVOLUTION_API_KEY não configurada nos secrets do Supabase."
-      );
-    }
-
-    // 2. Parse do Payload (Webhook do Supabase)
     const payload: WebhookPayload = await req.json().catch(() => ({}));
     console.log("[Webhook Recebido]", JSON.stringify(payload));
 
-    // Se for acionado por Webhook do Banco, valida se o evento é INSERT
     if (payload.type && payload.type !== "INSERT") {
       return new Response(
         JSON.stringify({
@@ -187,7 +151,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Extrai o registro do agendamento
     const record: WebhookRecord = payload.record || payload;
 
     if (!record || !record.id) {
@@ -203,31 +166,53 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 3. Inicializa Client Supabase Service Role para consultas complementares
+    console.log(`[Processando Agendamento #${record.id}] empresa_id recebido:`, record.empresa_id);
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 4. Resolução de Dados Complementares
     let nomeClinica = "Praxis";
     let telefoneClinica: string | null = null;
     let nomeServico = record.servico_nome || record.servico || "Consulta";
     let precoServico = "";
     let duracaoServico = "";
 
-    // Consulta dados da Empresa / Clínica
-    if (record.empresa_id) {
-      const { data: empresa } = await supabase
+    // 1. Busca Dados da Empresa
+    const targetEmpresaId = record.empresa_id;
+    if (targetEmpresaId) {
+      const { data: empresa, error: erroEmpresa } = await supabase
         .from("empresas")
-        .select("id, nome, nome_negocio, telefone, whatsapp, slug")
-        .eq("id", record.empresa_id)
+        .select("id, nome_negocio, telefone")
+        .eq("id", targetEmpresaId)
         .maybeSingle();
 
+      if (erroEmpresa) {
+        console.error("[Erro Supabase Empresas]:", erroEmpresa);
+      }
+
       if (empresa) {
-        nomeClinica = empresa.nome_negocio || empresa.nome || "Praxis";
-        telefoneClinica = empresa.whatsapp || empresa.telefone || null;
+        nomeClinica = empresa.nome_negocio || "Praxis";
+        telefoneClinica = empresa.telefone || null;
+        console.log(`[Empresa Encontrada]: ${nomeClinica} | Tel Bruto: ${telefoneClinica}`);
+      } else {
+        console.warn(`[Aviso]: Nenhuma empresa encontrada com o ID ${targetEmpresaId}`);
+      }
+    } else {
+      // Fallback: se o agendamento não salvou empresa_id, busca a primeira empresa cadastrada
+      console.warn("[Aviso]: record.empresa_id está vazio no agendamento! Buscando fallback...");
+      const { data: fallbackEmpresa } = await supabase
+        .from("empresas")
+        .select("id, nome_negocio, telefone")
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackEmpresa) {
+        nomeClinica = fallbackEmpresa.nome_negocio || "Praxis";
+        telefoneClinica = fallbackEmpresa.telefone || null;
+        console.log(`[Empresa Fallback Encontrada]: ${nomeClinica} | Tel Bruto: ${telefoneClinica}`);
       }
     }
 
-    // Consulta dados do Serviço
+    // 2. Busca Dados do Serviço
     if (record.servico_id) {
       const { data: servico } = await supabase
         .from("servicos")
@@ -238,11 +223,11 @@ Deno.serve(async (req: Request) => {
       if (servico) {
         nomeServico = servico.nome || nomeServico;
         precoServico = servico.preco || "";
-        duracaoServico = servico.duracao || "";
+        duracaoServico = servico.duracao ? `${servico.duracao} min` : "";
       }
     }
 
-    // Resolução de dados do paciente
+    // 3. Sanitização dos Telefones
     const nomePaciente =
       record.nome_cliente ||
       record.cliente_nome ||
@@ -259,7 +244,8 @@ Deno.serve(async (req: Request) => {
     const telefonePaciente = sanitizarTelefone(telefonePacienteBruto);
     const telefoneClinicaSanitizado = sanitizarTelefone(telefoneClinica);
 
-    // Resolução de Data e Hora
+    console.log(`[Telefones Processados] Paciente: ${telefonePaciente} | Clínica: ${telefoneClinicaSanitizado}`);
+
     let dataFormatada = formatarData(
       record.data || record.data_agendamento || record.data_hora_agendamento
     );
@@ -271,12 +257,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const observacoes = record.observacoes || record.notas || "";
-
     const resultadosEnvios: any[] = [];
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // 5. Mensagem 1: Confirmação para o Paciente
-    // ─────────────────────────────────────────────────────────────────────────
+    // Envio 1: Paciente
     if (telefonePaciente) {
       const textoPaciente = [
         `Olá, *${nomePaciente}*! 👋`,
@@ -287,7 +270,7 @@ Deno.serve(async (req: Request) => {
         `🩺 *Serviço:* ${nomeServico}`,
         `📅 *Data:* ${dataFormatada}`,
         `⏰ *Horário:* ${horarioFormatado}`,
-        precoServico ? `💰 *Valor:* ${precoServico}` : null,
+        precoServico ? `💰 *Valor:* R$ ${precoServico}` : null,
         duracaoServico ? `⏱️ *Duração estimada:* ${duracaoServico}` : null,
         ``,
         `Caso precise reagendar ou tirar dúvidas, basta responder a esta mensagem.`,
@@ -313,16 +296,9 @@ Deno.serve(async (req: Request) => {
       });
     } else {
       console.log("[Aviso] Paciente não possui telefone sanitizável válido.");
-      resultadosEnvios.push({
-        destinatario: "paciente",
-        status: "ignorado",
-        motivo: "Telefone do paciente ausente ou inválido",
-      });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // 6. Mensagem 2: Alerta para o Profissional / Clínica
-    // ─────────────────────────────────────────────────────────────────────────
+    // Envio 2: Profissional / Clínica
     if (telefoneClinicaSanitizado) {
       const textoClinica = [
         `🔔 *Novo Agendamento Confirmado!*`,
@@ -339,6 +315,8 @@ Deno.serve(async (req: Request) => {
         .filter((l) => l !== null)
         .join("\n");
 
+      console.log(`[Disparando Alerta Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+
       const resClinica = await enviarMensagemWhatsApp({
         apiUrl: EVOLUTION_API_URL,
         apiKey: EVOLUTION_API_KEY,
@@ -353,6 +331,10 @@ Deno.serve(async (req: Request) => {
         status: resClinica.sucesso ? "enviado" : "erro",
         detalhes: resClinica,
       });
+    } else {
+      console.warn(
+        `[Alerta Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
+      );
     }
 
     return new Response(

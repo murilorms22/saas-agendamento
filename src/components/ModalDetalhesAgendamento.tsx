@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Tag,
+  FileText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { AgendamentoItem, StatusAgendamento } from "./ModalNovoAgendamento";
@@ -186,6 +187,18 @@ export function ModalDetalhesAgendamento({
               </a>
             )}
           </div>
+
+          {/* Observações / Notas Clínicas se houver */}
+          {agendamento.observacoes && (
+            <div className="p-3.5 rounded-xl bg-background border border-border/30 space-y-1">
+              <span className="text-[10px] font-body font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <FileText size={12} className="text-primary" /> Observações / Notas
+              </span>
+              <p className="font-body text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                {agendamento.observacoes}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Ações: Confirmar rápida, Editar (Lápis bem visível) e Cancelar */}

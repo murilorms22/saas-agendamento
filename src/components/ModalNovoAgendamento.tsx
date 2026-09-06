@@ -13,7 +13,9 @@ export interface AgendamentoItem {
   nomeCliente: string;
   telefone?: string;
   servico: string;
+  servico_id?: string | number | null;
   status: StatusAgendamento;
+  observacoes?: string;
 }
 
 export interface ModalNovoAgendamentoProps {

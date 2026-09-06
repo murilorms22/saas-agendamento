@@ -47,6 +47,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
 import { ModalNovoAgendamento } from "../../components/ModalNovoAgendamento";
+import { ModalDetalhesAgendamento } from "../../components/ModalDetalhesAgendamento";
 import { ModalEdicaoAgendamento } from "../../components/ModalEdicaoAgendamento";
 import confetti from "canvas-confetti";
 
@@ -489,8 +490,11 @@ function VisualizadorAgenda({
     }),
   };
 
-  // Estado do Modal de Detalhes
+  // Estado do Modal de Detalhes (1ª camada ao clicar no card)
   const [agendamentoDetalhes, setAgendamentoDetalhes] = useState<AgendamentoSemana | null>(null);
+
+  // Estado do Modal de Edição Completa (2ª camada acionada pelo botão Editar do modal de detalhes)
+  const [agendamentoParaEdicao, setAgendamentoParaEdicao] = useState<AgendamentoSemana | null>(null);
 
   // Estado da animação de puff/exclusão
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
@@ -515,8 +519,9 @@ function VisualizadorAgenda({
   };
 
   const handleExcluirAgendamento = async (id: string) => {
-    // 1. Fecha o modal de detalhes para o usuário ver o card na agenda
+    // 1. Fecha os modais para o usuário ver o card na agenda
     setAgendamentoDetalhes(null);
+    setAgendamentoParaEdicao(null);
 
     // 2. Ativa o estado de exclusão com puff
     setExcluindoId(id);
@@ -639,12 +644,33 @@ function VisualizadorAgenda({
 
   return (
     <div className="space-y-6">
-      {/* ── Modal Unificado de Edição de Agendamento ── */}
+      {/* ── Modal de Detalhes do Agendamento (1ª Camada ao Clicar no Card) ── */}
       <AnimatePresence>
         {agendamentoDetalhes && (
-          <ModalEdicaoAgendamento
-            aberto={Boolean(agendamentoDetalhes)}
+          <ModalDetalhesAgendamento
             agendamento={agendamentoDetalhes}
+            onFechar={() => setAgendamentoDetalhes(null)}
+            onEditar={(ag) => {
+              setAgendamentoDetalhes(null);
+              setAgendamentoParaEdicao(ag as AgendamentoSemana);
+            }}
+            onExcluir={handleExcluirAgendamento}
+            onAtualizarStatus={async (_id, novoStatus) => {
+              if (onAtualizarAgendamento && agendamentoDetalhes) {
+                onAtualizarAgendamento({ ...agendamentoDetalhes, status: novoStatus });
+              }
+              setAgendamentoDetalhes(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal Unificado de Edição de Agendamento (2ª Camada acionada via Editar) ── */}
+      <AnimatePresence>
+        {agendamentoParaEdicao && (
+          <ModalEdicaoAgendamento
+            aberto={Boolean(agendamentoParaEdicao)}
+            agendamento={agendamentoParaEdicao}
             empresaId={profissional?.id}
             servicos={profissional?.servicos ?? []}
             horariosDisponiveis={
@@ -652,12 +678,12 @@ function VisualizadorAgenda({
                 "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"
               ]
             }
-            onFechar={() => setAgendamentoDetalhes(null)}
+            onFechar={() => setAgendamentoParaEdicao(null)}
             onSalvar={async (editado) => {
               if (onAtualizarAgendamento) {
                 onAtualizarAgendamento(editado as AgendamentoSemana);
               }
-              setAgendamentoDetalhes(null);
+              setAgendamentoParaEdicao(null);
             }}
             onExcluir={handleExcluirAgendamento}
           />
@@ -952,9 +978,11 @@ function VisualizadorAgenda({
                                   transition={{
                                     layout: { type: "spring", stiffness: 350, damping: 26 },
                                   }}
-                                  className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs relative overflow-visible ${
+                                  className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs relative overflow-visible cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
                                     fundos[ag.status as StatusAgendamento]
                                   }`}
+                                  onClick={() => !excluindoId && setAgendamentoDetalhes(ag)}
+                                  title="Clique para ver detalhes desta consulta"
                                 >
                                   {excluindoId === ag.id && <EfeitoPuffFumaca />}
                                   <div className="space-y-0.5">
@@ -971,14 +999,17 @@ function VisualizadorAgenda({
 
                                   <div className="flex items-center gap-2 self-end sm:self-center">
                                     <button
-                                        type="button"
-                                        onClick={() => handleEditarAgendamento(ag)}
-                                        className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                                        title="Editar consulta"
-                                      >
-                                        <Pencil size={12} />
-                                        <span>Editar</span>
-                                      </button>
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setAgendamentoDetalhes(ag);
+                                      }}
+                                      className="text-[11px] font-body font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                                      title="Ver detalhes da consulta"
+                                    >
+                                      <Clock size={12} />
+                                      <span>Ver detalhes</span>
+                                    </button>
                                   </div>
                                 </motion.div>
                               );
