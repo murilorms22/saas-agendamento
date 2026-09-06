@@ -262,6 +262,18 @@ function FluxoAgendamentoConteudo() {
   };
 
   const handleSelecionarHorario = (slot: string) => {
+    if (horariosOcupados.includes(slot)) {
+      exibirToast("Este horário já está reservado por outro cliente. Por favor, escolha outro.", "warning");
+      return;
+    }
+    if (isToday(dataSelecionada)) {
+      const agora = new Date();
+      const [h, m = 0] = slot.split(":").map(Number);
+      if (h * 60 + m <= agora.getHours() * 60 + agora.getMinutes()) {
+        exibirToast("Este horário já passou. Escolha um horário futuro para hoje.", "warning");
+        return;
+      }
+    }
     setHorarioSelecionado(slot);
     salvarNoSession(STORAGE_KEYS.HORARIO, slot);
   };
@@ -466,8 +478,14 @@ function FluxoAgendamentoConteudo() {
   }, [dataSelecionada, profissional?.id]);
 
   // ── Cálculo dos Slots Disponíveis do Dia com base na Disponibilidade ──
-  const slotsDoDia = useMemo(() => {
+  const slotsDoDia = useMemo<{ slots: string[]; bloqueado: boolean; motivo?: string }>(() => {
     const dataStr = format(dataSelecionada, "yyyy-MM-dd");
+    const hoje = isToday(dataSelecionada);
+    const diaPassado = isPast(dataSelecionada) && !hoje;
+
+    if (diaPassado) {
+      return { slots: [], bloqueado: true, motivo: "Esta data já pertence ao passado." };
+    }
 
     // 1. Checa se o dia é um bloqueio ou folga configurada
     const bloqueios = profissional.disponibilidade?.bloqueios as
@@ -501,6 +519,8 @@ function FluxoAgendamentoConteudo() {
     const diaSemana = mapaDias[dataSelecionada.getDay()];
     const configDia = profissional.disponibilidade?.horarios?.[diaSemana];
 
+    let todosSlots: string[] = [];
+
     if (configDia) {
       if (!configDia.ativo) {
         return { slots: [], bloqueado: true, motivo: "Sem atendimento neste dia da semana" };
@@ -521,7 +541,6 @@ function FluxoAgendamentoConteudo() {
         minIntFim = hf * 60 + mf;
       }
 
-      const slots: string[] = [];
       for (let cur = minInicio; cur + intervaloMinutos <= minFim; cur += intervaloMinutos) {
         // Exclui os horários de almoço / intervalo configurados
         if (configDia.temIntervalo && cur >= minIntIni && cur < minIntFim) {
@@ -529,28 +548,51 @@ function FluxoAgendamentoConteudo() {
         }
         const hh = Math.floor(cur / 60);
         const mm = cur % 60;
-        slots.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
+        todosSlots.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
       }
-
-      return { slots, bloqueado: false };
+    } else {
+      // Fallback padrão
+      todosSlots = [
+        ...(profissional.horariosDisponiveis || [
+          "08:00",
+          "09:00",
+          "10:00",
+          "11:00",
+          "13:00",
+          "14:00",
+          "15:00",
+          "16:00",
+          "17:00",
+        ]),
+      ];
     }
 
-    // Fallback padrão
-    return {
-      slots: profissional.horariosDisponiveis || [
-        "08:00",
-        "09:00",
-        "10:00",
-        "11:00",
-        "13:00",
-        "14:00",
-        "15:00",
-        "16:00",
-        "17:00",
-      ],
-      bloqueado: false,
-    };
+    // 4. Se a data for hoje, remove da lista de opções todos os horários que já passaram
+    if (hoje) {
+      const agora = new Date();
+      const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+      todosSlots = todosSlots.filter((slot) => {
+        const [h, m = 0] = slot.split(":").map(Number);
+        return h * 60 + m > minutosAgora;
+      });
+    }
+
+    return { slots: todosSlots, bloqueado: false };
   }, [dataSelecionada, profissional.disponibilidade, profissional.horariosDisponiveis, servicoEscolhido?.duracao]);
+
+  // ── Auto-limpeza de Horário Inválido / Expirado ──
+  useEffect(() => {
+    if (horarioSelecionado) {
+      const estaNosSlots = slotsDoDia.slots.includes(horarioSelecionado);
+      const estaOcupado = horariosOcupados.includes(horarioSelecionado);
+      if (!estaNosSlots || estaOcupado) {
+        setHorarioSelecionado(null);
+        try {
+          sessionStorage.removeItem(STORAGE_KEYS.HORARIO);
+        } catch (e) {}
+      }
+    }
+  }, [slotsDoDia.slots, horariosOcupados, horarioSelecionado]);
 
   // ── Calendário: Helpers de Navegação ──
   const proximoMes = () => setMesAtual(addMonths(mesAtual, 1));

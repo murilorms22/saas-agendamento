@@ -151,7 +151,23 @@ export function ModalNovoAgendamento({
         setNomeCliente("");
         setTelefone("");
         setServicoNome(servicos[0]?.nome ?? "Consulta");
-        setHorario(horariosDisponiveis[0] ?? "08:00");
+
+        // Seleciona o primeiro horário futuro e livre se a data for hoje
+        const hojeStr = format(new Date(), "yyyy-MM-dd");
+        const ehHoje = dataInicial === hojeStr;
+        const agora = new Date();
+        const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+
+        let horarioSugerido = horariosDisponiveis[0] ?? "08:00";
+        if (ehHoje) {
+          const primeiroFuturo = horariosDisponiveis.find((h) => {
+            const [hr, mn = 0] = h.split(":").map(Number);
+            return hr * 60 + mn > minutosAgora;
+          });
+          if (primeiroFuturo) horarioSugerido = primeiroFuturo;
+        }
+
+        setHorario(horarioSugerido);
         setStatus("Confirmado");
       }
       setSugestoes([]);
@@ -201,6 +217,17 @@ export function ModalNovoAgendamento({
     e.preventDefault();
     const nomeLimpo = nomeCliente.trim();
     if (!nomeLimpo) return;
+
+    // 0. Trava de Horário no Passado (quando for o dia de hoje)
+    const hojeStr = format(new Date(), "yyyy-MM-dd");
+    if (dataSelecionada === hojeStr && !agendamentoInicial) {
+      const agora = new Date();
+      const [h, m = 0] = horario.split(":").map(Number);
+      if (h * 60 + m <= agora.getHours() * 60 + agora.getMinutes()) {
+        setErroTrava(`O horário ${horario} já passou. Escolha um horário futuro para hoje.`);
+        return;
+      }
+    }
 
     // 1. Trava de Segurança Local: Não permite agendar por cima de horário já ocupado
     const conflitoLocal = agendamentosDoDia.find(
@@ -489,9 +516,15 @@ export function ModalNovoAgendamento({
                   const ocupado = agendamentosDoDia.find(
                     (a) => a.horario === h && (!agendamentoInicial || String(a.id) !== String(agendamentoInicial.id))
                   );
+                  const hojeStr = format(new Date(), "yyyy-MM-dd");
+                  const ehHoje = dataSelecionada === hojeStr;
+                  const agora = new Date();
+                  const [hr, mn = 0] = h.split(":").map(Number);
+                  const jaPassou = ehHoje && !agendamentoInicial && hr * 60 + mn <= agora.getHours() * 60 + agora.getMinutes();
+
                   return (
-                    <option key={h} value={h} disabled={Boolean(ocupado)}>
-                      {h} {ocupado ? `— ⚠️ Ocupado (${ocupado.nomeCliente})` : ""}
+                    <option key={h} value={h} disabled={Boolean(ocupado || jaPassou)}>
+                      {h} {ocupado ? `— ⚠️ Ocupado (${ocupado.nomeCliente})` : jaPassou ? "— ⏱️ Já passou" : ""}
                     </option>
                   );
                 })}
