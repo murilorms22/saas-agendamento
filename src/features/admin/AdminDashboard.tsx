@@ -94,6 +94,18 @@ function mapearAgendamento(
     statusFinal = row.status;
   }
 
+  // 🛡️ Auto-finalização de horários expirados
+  if (statusFinal === "Confirmado") {
+    try {
+      const [ano, mesNum, diaNum] = dataFinal.split("-").map(Number);
+      const [horaNum, minNum] = horarioFinal.split(":").map(Number);
+      const dataHoraInicio = new Date(ano, mesNum - 1, diaNum, horaNum, minNum);
+      if (dataHoraInicio < new Date()) {
+        statusFinal = "Finalizado";
+      }
+    } catch (e) {}
+  }
+
   const cliNome = Array.isArray((row as any).clientes)
     ? (row as any).clientes[0]?.nome
     : (row as any).clientes?.nome;

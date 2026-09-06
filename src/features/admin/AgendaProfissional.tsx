@@ -161,6 +161,24 @@ function mapearAgendamentoSemana(
     cliNome ||
     "Paciente";
 
+  let statusResolvido: StatusAgendamento =
+    row.status === "Confirmado" || row.status === "Finalizado" || row.status === "Cancelado"
+      ? (row.status as StatusAgendamento)
+      : "Pendente";
+
+  // 🛡️ Auto-finalização de horários expirados:
+  // Se a consulta estiver Confirmada e a data/horário de início já passou do momento atual, exibe como Finalizado
+  if (statusResolvido === "Confirmado") {
+    try {
+      const [ano, mesNum, diaNum] = dataFinal.split("-").map(Number);
+      const [horaNum, minNum] = horarioFinal.split(":").map(Number);
+      const dataHoraInicio = new Date(ano, mesNum - 1, diaNum, horaNum, minNum);
+      if (dataHoraInicio < new Date()) {
+        statusResolvido = "Finalizado";
+      }
+    } catch (e) {}
+  }
+
   return {
     id: String(row.id),
     data: dataFinal,
@@ -174,9 +192,7 @@ function mapearAgendamentoSemana(
       cliTel ??
       "",
     servico: servicoNome,
-    status: (row.status === "Confirmado" || row.status === "Finalizado" || row.status === "Cancelado"
-      ? row.status
-      : "Pendente") as StatusAgendamento,
+    status: statusResolvido,
   };
 }
 
@@ -337,12 +353,29 @@ function CardAgendamento({
         <span className="text-[10px] font-body text-primary font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
           Detalhes →
         </span>
-        {/* Em baixo na direita, ao lado do horário */}
+        {/* Em baixo na direita, ao lado do horário com affordance elegante de edição */}
         <div className="flex items-center gap-1.5 ml-auto">
           <span className="font-body font-bold text-foreground flex items-center gap-1 text-[11px]">
             <Clock size={10} className="text-primary" /> {ag.horario}
           </span>
-          <BadgeStatus status={ag.status} />
+
+          {/* Badge de status que no hover do card dá lugar ao botão de edição com lápis */}
+          <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
+            <span className="group-hover:opacity-0 group-hover:scale-75 transition-all duration-200 flex items-center justify-center">
+              <BadgeStatus status={ag.status} />
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onVerDetalhes(ag);
+              }}
+              title="Editar consulta completa"
+              className="absolute inset-0 opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground shadow-xs hover:scale-110 cursor-pointer"
+            >
+              <Pencil size={10} className="stroke-[2.5]" />
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -600,7 +633,9 @@ function VisualizadorAgenda({
     if (emblaApi) {
       const idx = listaDiasCarrossel.findIndex((d) => isSameDay(d, dia));
       if (idx !== -1) {
-        setTimeout(() => emblaApi.scrollTo(idx, false), 50);
+        // Ancoragem inteligente: centraliza o dia clicado nos 5 dias visíveis do carrossel
+        const idxCentralizado = Math.max(0, idx - 2);
+        setTimeout(() => emblaApi.scrollTo(idxCentralizado, false), 50);
       }
     }
   };
@@ -1080,7 +1115,7 @@ function VisualizadorAgenda({
                     <div
                       key={dia.toString()}
                       onClick={() => setDiaSelecionado(dia)}
-                      onDoubleClick={() => abrirNovoAgendamento(dia)}
+                      onDoubleClick={() => abrirDiaNaSemana(dia)}
                       className={`group min-h-[95px] md:min-h-[120px] p-2 rounded-2xl border text-left transition-all flex flex-col justify-between relative cursor-pointer ${
                         !mesCorrente ? "opacity-35 bg-secondary/20 border-transparent" : "bg-background/80"
                       } ${
@@ -1088,7 +1123,7 @@ function VisualizadorAgenda({
                           ? "border-primary ring-2 ring-primary/40 shadow-sm bg-primary/5"
                           : "border-border/30 hover:border-primary/40 hover:bg-secondary/30"
                       }`}
-                      title="Clique para ver detalhes ou duplo clique para agendar"
+                      title="Clique para selecionar ou duplo clique para abrir na visão semanal"
                     >
                       {/* Topo da Célula: Número do Dia + Badge de Qtd */}
                       <div className="flex items-center justify-between w-full">
