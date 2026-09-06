@@ -14,6 +14,10 @@ ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS disponibilidade JSONB;
 
+-- Colunas complementares para servicos
+ALTER TABLE public.servicos ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE public.servicos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+
 -- ------------------------------------------------------------------------------
 -- 2. ATIVAÇÃO DE ROW LEVEL SECURITY (RLS) EM TODAS AS TABELAS SENSÍVEIS
 -- ------------------------------------------------------------------------------

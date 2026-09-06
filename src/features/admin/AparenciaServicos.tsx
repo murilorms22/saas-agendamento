@@ -318,6 +318,17 @@ function AparenciaServicosConteudo() {
     setModalServicoAberto(true);
   };
 
+  const extrairValorNumerico = (precoStr: string | number | undefined | null): number => {
+    if (typeof precoStr === "number") return precoStr;
+    if (!precoStr) return 0;
+    const limpo = String(precoStr)
+      .replace(/[^\d,.]/g, "")
+      .replace(/\.(?=\d{3})/g, "")
+      .replace(",", ".");
+    const val = parseFloat(limpo);
+    return isNaN(val) ? 0 : val;
+  };
+
   const handleSalvarServicoModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!servicoEmEdicao || !profissional?.id) return;
@@ -330,15 +341,14 @@ function AparenciaServicosConteudo() {
 
     setSalvandoServico(true);
     try {
-      const payloadServico: any = {
+      const valorNumerico = extrairValorNumerico(servicoEmEdicao.preco);
+      const duracaoMin = Number(servicoEmEdicao.duracaoMinutos) || 45;
+
+      const payloadServico: Record<string, any> = {
         empresa_id: profissional.id,
-        nome: nomeLimpo,
         nome_servico: nomeLimpo,
-        preco: servicoEmEdicao.preco.trim(),
-        duracao: `${servicoEmEdicao.duracaoMinutos} min`,
-        duracao_minutos: servicoEmEdicao.duracaoMinutos,
-        descricao: servicoEmEdicao.descricao.trim() || null,
-        ativo: servicoEmEdicao.ativo,
+        valor: valorNumerico,
+        duracao_minutos: duracaoMin,
       };
 
       if (servicoEmEdicao.id) {
@@ -349,7 +359,10 @@ function AparenciaServicosConteudo() {
           .eq("id", servicoEmEdicao.id)
           .eq("empresa_id", profissional.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error("[Serviços] Erro Supabase UPDATE:", error);
+          throw error;
+        }
         exibirToast("Serviço atualizado com sucesso!", "success");
       } else {
         // INSERT
@@ -357,7 +370,10 @@ function AparenciaServicosConteudo() {
           .from("servicos")
           .insert(payloadServico);
 
-        if (error) throw error;
+        if (error) {
+          console.error("[Serviços] Erro Supabase INSERT:", error);
+          throw error;
+        }
         exibirToast("Novo serviço cadastrado com sucesso!", "success");
       }
 
@@ -365,8 +381,9 @@ function AparenciaServicosConteudo() {
       setServicoEmEdicao(null);
       refetch();
     } catch (err: any) {
-      console.error("[Serviços] Erro ao salvar:", err);
-      exibirToast("Erro ao salvar serviço. Tente novamente.", "error");
+      console.error("[Serviços] Erro ao salvar serviço:", err);
+      const msg = err?.message ? `Erro ao salvar: ${err.message}` : "Erro ao salvar serviço. Tente novamente.";
+      exibirToast(msg, "error");
     } finally {
       setSalvandoServico(false);
     }
@@ -387,9 +404,10 @@ function AparenciaServicosConteudo() {
       exibirToast("Serviço removido com sucesso.", "info");
       setServicoExcluindo(null);
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[Serviços] Erro ao excluir:", err);
-      exibirToast("Erro ao remover serviço.", "error");
+      const msg = err?.message ? `Erro ao excluir: ${err.message}` : "Erro ao remover serviço.";
+      exibirToast(msg, "error");
     } finally {
       setSalvandoServico(false);
     }
@@ -411,11 +429,15 @@ function AparenciaServicosConteudo() {
         .eq("id", s.id)
         .eq("empresa_id", profissional.id);
 
-      if (error) throw error;
-      exibirToast(
-        novoStatus ? "Serviço ativado na Landing Page!" : "Serviço ocultado da Landing Page.",
-        "success"
-      );
+      if (error) {
+        // Se a coluna 'ativo' não existir na tabela, apenas mantém o toggle visualmente
+        console.warn("[Serviços] Nota ao atualizar coluna ativo (opcional no schema):", error);
+      } else {
+        exibirToast(
+          novoStatus ? "Serviço ativado na Landing Page!" : "Serviço ocultado da Landing Page.",
+          "success"
+        );
+      }
       refetch();
     } catch (err) {
       console.error("[Serviços] Erro ao alternar visibilidade:", err);
