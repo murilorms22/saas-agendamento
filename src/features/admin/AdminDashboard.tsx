@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   AlertCircle,
   Calendar as CalendarIcon,
+  Pencil,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../../store/useProfessional";
@@ -770,7 +771,7 @@ function DashboardConteudo() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.94 }}
                     transition={{ duration: 0.25 }}
-                    className={`flex flex-col p-5 rounded-3xl bg-card border-l-4 ${config.corBorda} border border-border/50 shadow-floating relative transition-all`}
+                    className={`flex flex-col p-5 rounded-3xl bg-card border-l-4 ${config.corBorda} border border-border/50 shadow-floating relative transition-all group hover:shadow-lg`}
                   >
                     {/* Topo do Card */}
                     <div className="flex items-start justify-between gap-3 mb-4">
@@ -782,7 +783,7 @@ function DashboardConteudo() {
                           <h3
                             onClick={() => setAgendamentoDetalhes(ag)}
                             className="font-display font-bold text-base text-foreground hover:text-primary transition-colors truncate cursor-pointer leading-snug"
-                            title="Clique para ver detalhes"
+                            title="Clique para ver detalhes e editar"
                           >
                             {ag.nomeCliente}
                           </h3>
@@ -792,16 +793,33 @@ function DashboardConteudo() {
                         </div>
                       </div>
 
-                      {/* Badge do Status Atual */}
-                      <div
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold border shrink-0 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
-                      >
-                        {estaCarregandoLinha ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          config.icone
-                        )}
-                        <span>{config.label}</span>
+                      {/* Badge do Status Atual & Affordance de Edição no Hover */}
+                      <div className="relative shrink-0 flex items-center justify-end">
+                        {/* Badge Visível por Padrão */}
+                        <div
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold border transition-all duration-200 group-hover:opacity-0 group-hover:scale-90 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
+                        >
+                          {estaCarregandoLinha ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            config.icone
+                          )}
+                          <span>{config.label}</span>
+                        </div>
+
+                        {/* Botão de Lápis / Editar exibido no Hover do Card */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAgendamentoDetalhes(ag);
+                          }}
+                          title="Editar agendamento completo"
+                          className="absolute inset-0 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold bg-primary text-primary-foreground shadow-sm opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 hover:brightness-110 active:scale-95 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+                        >
+                          <Pencil size={12} className="shrink-0 stroke-[2.5]" />
+                          <span>Editar</span>
+                        </button>
                       </div>
                     </div>
 
@@ -985,18 +1003,30 @@ function DashboardConteudo() {
                           </div>
                         </td>
 
-                        {/* Status Atual */}
+                        {/* Status Atual & Affordance de Edição no Hover */}
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
-                          >
-                            {estaCarregandoLinha ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              config.icone
-                            )}
-                            <span>{config.label}</span>
-                          </span>
+                          <div className="relative inline-flex items-center">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all duration-200 group-hover:opacity-0 group-hover:scale-90 ${config.bgBadge} ${config.textoBadge} ${config.bordaBadge}`}
+                            >
+                              {estaCarregandoLinha ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                config.icone
+                              )}
+                              <span>{config.label}</span>
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setAgendamentoDetalhes(ag)}
+                              title="Editar agendamento completo"
+                              className="absolute inset-0 inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-body font-bold bg-primary text-primary-foreground shadow-sm opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 hover:brightness-110 active:scale-95 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+                            >
+                              <Pencil size={12} className="shrink-0 stroke-[2.5]" />
+                              <span>Editar</span>
+                            </button>
+                          </div>
                         </td>
 
                         {/* 🛡️ Ações Rápidas de Mudança de Status */}
