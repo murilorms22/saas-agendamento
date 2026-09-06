@@ -21,7 +21,7 @@ export interface ModalNovoAgendamentoProps {
   data?: Date;
   onFechar: () => void;
   onSalvar: (novo: AgendamentoItem) => void;
-  servicos: { id: number; nome: string; preco: string; duracao: string }[];
+  servicos: { id: number | string; nome: string; preco: string; duracao: string }[];
   horariosDisponiveis: string[];
   empresaId?: string;
   agendamentoInicial?: AgendamentoItem | null;

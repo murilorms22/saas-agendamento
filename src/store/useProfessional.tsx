@@ -29,10 +29,12 @@ import { isReservedSlug } from "../constants/reservedSlugs";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Servico {
-  id: number;
+  id: number | string;
   nome: string;
   duracao: string;  // ex: "50 min"
   preco: string;    // ex: "R$ 120,00"
+  descricao?: string;
+  ativo?: boolean;
 }
 
 /** HSL como números separados — injeta-se como `h s% l%` no CSS */
@@ -48,6 +50,8 @@ export interface ProfessionalData {
   profissao: string;
   tagline: string;
   descricao: string;
+  telefone?: string;
+  whatsapp?: string;
   stats: Array<{ valor: string; rotulo: string }>;
   servicos: Servico[];
   horariosDisponiveis: string[];
@@ -247,6 +251,8 @@ function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {
       "Atendimento Profissional",
     tagline: row.tagline ?? perfil.tagline ?? "Agende seu horário com facilidade",
     descricao: row.descricao ?? perfil.descricao ?? "Atendimento personalizado com hora marcada.",
+    telefone: row.telefone ?? row.whatsapp ?? perfil.telefone ?? "",
+    whatsapp: row.whatsapp ?? row.telefone ?? perfil.whatsapp ?? "",
     stats,
     servicos,
     horariosDisponiveis: calcularHorariosDisponiveis(disp),
@@ -264,6 +270,8 @@ function mapearServico(row: any): Servico {
     nome: row.nome_servico ?? row.nome ?? row.titulo ?? "Serviço",
     duracao: formatarDuracao(row.duracao_minutos ?? row.duracao ?? 45),
     preco: formatarPreco(row.preco_centavos ?? row.preco ?? row.valor ?? 100),
+    descricao: row.descricao ?? "",
+    ativo: row.ativo !== false,
   };
 }
 

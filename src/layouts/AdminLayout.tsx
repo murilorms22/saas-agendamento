@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ChevronRight,
   ExternalLink,
+  Palette,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
@@ -22,6 +23,7 @@ const navItems = [
   { to: "/admin", label: "Painel Inicial", icon: LayoutDashboard, exact: true },
   { to: "/admin/resumo", label: "Resumo do Dia", icon: CalendarDays, exact: false },
   { to: "/admin/agenda", label: "Minha Agenda", icon: Calendar, exact: false },
+  { to: "/admin/aparencia", label: "Aparência & Serviços", icon: Palette, exact: false },
   { to: "/admin/configuracoes", label: "Configurações", icon: Settings, exact: false },
 ];
 

@@ -9,6 +9,7 @@ import LoginPage from "./features/auth/LoginPage";
 import PainelInicial from "./features/admin/PainelInicial";
 import AdminDashboard from "./features/admin/AdminDashboard";
 import AgendaProfissional from "./features/admin/AgendaProfissional";
+import AparenciaServicos from "./features/admin/AparenciaServicos";
 import Configuracoes from "./features/admin/Configuracoes";
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
               <Route index element={<PainelInicial />} />
               <Route path="resumo" element={<AdminDashboard />} />
               <Route path="agenda" element={<AgendaProfissional />} />
+              <Route path="aparencia" element={<AparenciaServicos />} />
               <Route path="configuracoes" element={<Configuracoes />} />
             </Route>
 
