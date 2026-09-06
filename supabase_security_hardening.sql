@@ -330,3 +330,18 @@ ON storage.objects
 FOR DELETE
 TO authenticated
 USING (bucket_id = 'logos');
+
+-- ------------------------------------------------------------------------------
+-- 9. CONCESSÃO DE PRIVILÉGIOS (GRANT PRIVILEGES NAS TABELAS E SEQUENCES)
+-- ------------------------------------------------------------------------------
+-- Necessário no PostgreSQL/Supabase para evitar o erro 'permission denied for table servicos'
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
+
