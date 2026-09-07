@@ -1020,7 +1020,7 @@ function FluxoAgendamentoConteudo() {
   };
 
   return (
-    <div className="min-h-full w-full bg-gradient-to-br from-background via-background to-primary/5 py-8 px-4 sm:px-6 lg:px-8 flex flex-col justify-center items-center relative overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-br from-background via-background to-primary/5 py-2 sm:py-4 px-3 sm:px-6 flex flex-col justify-start items-center relative overflow-y-auto">
       {/* ── Toast Flutuante de Alertas ── */}
       <AnimatePresence>
         {toast && (
@@ -1028,7 +1028,7 @@ function FluxoAgendamentoConteudo() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-floating border backdrop-blur-md text-xs font-body font-semibold max-w-md ${
+            className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl shadow-floating border backdrop-blur-md text-xs font-body font-semibold max-w-md ${
               toast.tipo === "warning"
                 ? "bg-amber-500/15 border-amber-500/30 text-amber-900 dark:text-amber-200"
                 : toast.tipo === "error"
@@ -1038,34 +1038,34 @@ function FluxoAgendamentoConteudo() {
                 : "bg-card/90 border-border text-foreground"
             }`}
           >
-            {toast.tipo === "warning" && <AlertTriangle size={18} className="text-amber-500 shrink-0" />}
-            {toast.tipo === "error" && <AlertCircle size={18} className="text-rose-500 shrink-0" />}
-            {toast.tipo === "success" && <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />}
+            {toast.tipo === "warning" && <AlertTriangle size={16} className="text-amber-500 shrink-0" />}
+            {toast.tipo === "error" && <AlertCircle size={16} className="text-rose-500 shrink-0" />}
+            {toast.tipo === "success" && <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />}
             <span className="leading-snug">{toast.mensagem}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* ── Top Header Público da Clínica & Autenticação do Paciente ── */}
-      <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-2 sm:py-3 px-2 sm:px-4 mb-2 shrink-0">
+      <header className="w-full max-w-2xl mx-auto flex items-center justify-between py-1.5 px-2 mb-1 shrink-0">
         {/* Logo / Nome da Clínica */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {profissional.logoUrl ? (
             <img
               src={profissional.logoUrl}
               alt={profissional.nomeClinica}
-              className="w-10 h-10 rounded-2xl object-cover shadow-soft border border-border/50"
+              className="w-8 h-8 rounded-xl object-cover shadow-soft border border-border/50"
             />
           ) : (
-            <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-display font-extrabold text-base border border-primary/20 shadow-soft">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-display font-extrabold text-xs border border-primary/20 shadow-soft">
               {profissional.nomeClinica.charAt(0).toUpperCase()}
             </div>
           )}
           <div>
-            <h2 className="font-display font-bold text-sm sm:text-base text-foreground leading-tight">
+            <h2 className="font-display font-bold text-xs sm:text-sm text-foreground leading-tight">
               {profissional.nomeClinica}
             </h2>
-            <p className="font-body text-[11px] text-muted-foreground font-medium">
+            <p className="font-body text-[10px] text-muted-foreground font-medium">
               {profissional.profissao || profissional.tagline || "Agendamento Online"}
             </p>
           </div>
@@ -1078,15 +1078,15 @@ function FluxoAgendamentoConteudo() {
               <button
                 type="button"
                 onClick={() => setMenuDropdownAberto(!menuDropdownAberto)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-card hover:bg-secondary/50 border border-border/80 shadow-soft transition-all text-foreground cursor-pointer"
+                className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-card hover:bg-secondary/50 border border-border/80 shadow-soft transition-all text-foreground cursor-pointer text-xs"
               >
-                <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-xs shadow-inner">
+                <div className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-[11px] shadow-inner">
                   {clienteLogado.nome ? clienteLogado.nome.charAt(0).toUpperCase() : "P"}
                 </div>
                 <span className="font-body text-xs font-bold max-w-[120px] sm:max-w-[160px] truncate hidden sm:inline">
                   {clienteLogado.nome.split(" ")[0]}
                 </span>
-                <ChevronDown size={14} className="text-muted-foreground" />
+                <ChevronDown size={13} className="text-muted-foreground" />
               </button>
 
               {/* Dropdown Menu */}
@@ -1102,13 +1102,13 @@ function FluxoAgendamentoConteudo() {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95, y: -4 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-56 rounded-2xl bg-card border border-border shadow-floating z-50 p-2 space-y-1"
+                      className="absolute right-0 mt-2 w-52 rounded-2xl bg-card border border-border shadow-floating z-50 p-1.5 space-y-0.5"
                     >
-                      <div className="px-3 py-2 border-b border-border/40 mb-1">
+                      <div className="px-2.5 py-1.5 border-b border-border/40 mb-1">
                         <p className="font-display font-bold text-xs text-foreground truncate">
                           {clienteLogado.nome}
                         </p>
-                        <p className="font-body text-[11px] text-muted-foreground truncate">
+                        <p className="font-body text-[10px] text-muted-foreground truncate">
                           {clienteLogado.email || (clienteLogado.telefone ? mascararTelefone(clienteLogado.telefone) : user.email)}
                         </p>
                       </div>
@@ -1119,9 +1119,9 @@ function FluxoAgendamentoConteudo() {
                           setMenuDropdownAberto(false);
                           setModalMeusAgendamentosAberto(true);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-body font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer text-left"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-body font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer text-left"
                       >
-                        <CalendarDays size={15} className="text-primary" />
+                        <CalendarDays size={14} className="text-primary" />
                         <span>Meus Agendamentos</span>
                       </button>
 
@@ -1131,9 +1131,9 @@ function FluxoAgendamentoConteudo() {
                           setMenuDropdownAberto(false);
                           await handleDeslogarCliente();
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-body font-semibold text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-left"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-body font-semibold text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-left"
                       >
-                        <LogOut size={15} />
+                        <LogOut size={14} />
                         <span>Sair da Conta</span>
                       </button>
                     </motion.div>
@@ -1145,18 +1145,18 @@ function FluxoAgendamentoConteudo() {
             <button
               type="button"
               onClick={() => setModalAuthAberto(true)}
-              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-card hover:bg-secondary/70 border border-border/80 font-body font-bold text-xs text-foreground shadow-soft transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-secondary/70 border border-border/80 font-body font-bold text-xs text-foreground shadow-soft transition-all cursor-pointer"
             >
-              <LogIn size={14} className="text-primary" />
+              <LogIn size={13} className="text-primary" />
               <span>Entrar / Cadastrar</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* ── Stepper com Linha do Tempo (Centrado com precisão matemática, sem extrapolar) ── */}
+      {/* ── Stepper com Linha do Tempo Compacto ── */}
       {!sucessoFinal && (
-        <div className="w-full max-w-2xl mx-auto pt-6 sm:pt-8 pb-14 px-6 sm:px-10">
+        <div className="w-full max-w-md sm:max-w-lg mx-auto pt-1 pb-2.5 px-3 sm:px-6 shrink-0">
           <div className="flex items-center w-full">
             {ETAPAS.map((etapa, index) => {
               const concluida = etapa.numero < passoAtual;
@@ -1168,29 +1168,29 @@ function FluxoAgendamentoConteudo() {
                   key={etapa.numero}
                   className="flex items-center flex-1 last:flex-none"
                 >
-                  {/* Círculo com Label Flutuante */}
+                  {/* Círculo com Label */}
                   <div className="relative flex flex-col items-center">
                     <motion.button
                       type="button"
-                      animate={{ scale: ativa ? 1.15 : 1 }}
+                      animate={{ scale: ativa ? 1.08 : 1 }}
                       onClick={() => {
                         if (concluida) navegarParaPasso(etapa.numero as EtapaFluxo);
                       }}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-display font-bold text-xs sm:text-sm transition-all duration-300 shadow-soft shrink-0 ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-display font-bold text-[11px] sm:text-xs transition-all duration-300 shadow-soft shrink-0 ${
                         concluida
                           ? "bg-primary text-primary-foreground cursor-pointer"
                           : ativa
-                          ? "bg-primary text-primary-foreground ring-4 ring-primary/25 shadow-soft-lg"
-                          : "bg-card text-muted-foreground border-2 border-border/70 cursor-default"
+                          ? "bg-primary text-primary-foreground ring-2 ring-primary/25 shadow-soft-lg"
+                          : "bg-card text-muted-foreground border border-border/70 cursor-default"
                       }`}
                       title={concluida ? `Voltar para etapa ${etapa.numero}` : etapa.label}
                     >
-                      {concluida ? <Check size={18} className="stroke-[3]" /> : <Icone size={18} />}
+                      {concluida ? <Check size={13} className="stroke-[3]" /> : <Icone size={13} />}
                     </motion.button>
 
-                    {/* Texto da Etapa (Centralizado com precisão abaixo do círculo) */}
+                    {/* Texto da Etapa */}
                     <span
-                      className={`absolute top-full mt-2.5 font-body text-[11px] sm:text-xs whitespace-nowrap transition-colors select-none ${
+                      className={`mt-1 font-body text-[10px] sm:text-[11px] whitespace-nowrap transition-colors select-none ${
                         ativa
                           ? "text-primary font-extrabold"
                           : concluida
@@ -1202,9 +1202,9 @@ function FluxoAgendamentoConteudo() {
                     </span>
                   </div>
 
-                  {/* Linha conectora entre este círculo e o próximo (não renderiza após a última bolinha) */}
+                  {/* Linha conectora entre este círculo e o próximo */}
                   {index < ETAPAS.length - 1 && (
-                    <div className="flex-1 h-1 bg-border/60 mx-2 sm:mx-3 rounded-full overflow-hidden relative">
+                    <div className="flex-1 h-0.5 bg-border/60 mx-1.5 sm:mx-2 rounded-full overflow-hidden relative">
                       <motion.div
                         className="h-full bg-primary rounded-full"
                         initial={false}
@@ -1223,7 +1223,7 @@ function FluxoAgendamentoConteudo() {
       )}
 
       {/* ── Container Card Central com Glassmorphism ── */}
-      <div className="w-full max-w-4xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-[2.5rem] p-6 sm:p-10 shadow-floating flex flex-col transition-all">
+      <div className="w-full max-w-2xl bg-card/90 backdrop-blur-xl border border-border/70 rounded-3xl p-4 sm:p-6 shadow-floating flex flex-col transition-all">
         {/* Se já foi finalizado com sucesso, exibe tela de celebração compacta (sem scroll vertical) */}
         {sucessoFinal ? (
           <motion.div
@@ -1231,12 +1231,12 @@ function FluxoAgendamentoConteudo() {
             animate={{ opacity: 1, scale: 1 }}
             className="py-2 sm:py-3 text-center space-y-3 max-w-sm sm:max-w-md mx-auto"
           >
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center ring-4 ring-emerald-500/10 shadow-soft">
-              <CheckCircle2 size={32} />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/15 text-emerald-500 mx-auto flex items-center justify-center ring-4 ring-emerald-500/10 shadow-soft">
+              <CheckCircle2 size={26} />
             </div>
 
             <div className="space-y-0.5">
-              <h2 className="text-xl sm:text-2xl font-display font-extrabold text-foreground tracking-tight">
+              <h2 className="text-lg sm:text-xl font-display font-extrabold text-foreground tracking-tight">
                 Consulta Agendada!
               </h2>
               <p className="text-xs font-body text-muted-foreground">
@@ -1245,7 +1245,7 @@ function FluxoAgendamentoConteudo() {
             </div>
 
             {/* Recibo Rápido do Sucesso Compacto */}
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-secondary/40 border border-border/60 text-left space-y-2 font-body text-xs">
+            <div className="p-3 sm:p-3.5 rounded-2xl bg-secondary/40 border border-border/60 text-left space-y-1.5 font-body text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground font-semibold">Serviço:</span>
                 <span className="font-bold text-foreground truncate max-w-[200px]">{servicoEscolhido?.nome}</span>
@@ -1262,13 +1262,13 @@ function FluxoAgendamentoConteudo() {
               </div>
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+            <div className="pt-1.5 flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
                 onClick={reiniciarFluxo}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-secondary hover:bg-secondary/80 font-body font-bold text-xs text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 py-2 px-3 rounded-xl bg-secondary hover:bg-secondary/80 font-body font-bold text-xs text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <RotateCcw size={14} />
+                <RotateCcw size={13} />
                 <span>Agendar Outro</span>
               </button>
               <a
@@ -1282,25 +1282,24 @@ function FluxoAgendamentoConteudo() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-2 px-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2"
               >
-                <CalendarIcon size={14} />
+                <CalendarIcon size={13} />
                 <span>Google Agenda</span>
               </a>
             </div>
           </motion.div>
         ) : (
           <>
-
-            {/* ── Tipografia de Impacto da Etapa Atual ── */}
-            <div className="text-center pt-1 mb-6 sm:mb-8 max-w-xl mx-auto space-y-2">
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-primary tracking-tight leading-tight">
+            {/* ── Tipografia Compacta da Etapa Atual ── */}
+            <div className="text-center mb-2.5 sm:mb-3.5 max-w-md mx-auto space-y-0.5">
+              <h1 className="text-base sm:text-lg lg:text-xl font-display font-extrabold text-primary tracking-tight leading-tight">
                 {passoAtual === 1 && "Qual serviço você deseja agendar?"}
                 {passoAtual === 2 && "Escolha o melhor dia e horário"}
                 {passoAtual === 3 && "Como podemos te identificar?"}
                 {passoAtual === 4 && "Confirme seu agendamento"}
               </h1>
-              <p className="text-xs sm:text-sm font-body text-muted-foreground font-medium">
+              <p className="text-[11px] sm:text-xs font-body text-muted-foreground font-medium">
                 {passoAtual === 1 && "Selecione um dos atendimentos disponíveis abaixo para continuar."}
                 {passoAtual === 2 && "Selecione uma data no calendário e clique no horário mais conveniente."}
                 {passoAtual === 3 && "Acesse sua conta ou informe seus dados para garantir a reserva."}
@@ -1311,7 +1310,7 @@ function FluxoAgendamentoConteudo() {
             {/* ── Conteúdo da Etapa Atual com AnimatePresence ── */}
             <div className="flex-1">
               <AnimatePresence mode="wait">
-                {/* ── ETAPA 1: SERVIÇOS (Espaçamento Aumentado) ── */}
+                {/* ── ETAPA 1: SERVIÇOS (Compacto) ── */}
                 {passoAtual === 1 && (
                   <motion.div
                     key="passo-1"
@@ -1319,7 +1318,7 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 py-4 sm:py-6"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 py-1.5 sm:py-2.5"
                   >
                     {profissional.servicos.map((servico) => {
                       const selecionado = servicoEscolhido?.id === servico.id;
@@ -1328,45 +1327,45 @@ function FluxoAgendamentoConteudo() {
                         <div
                           key={servico.id}
                           onClick={() => handleSelecionarServico(servico)}
-                          className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-4 shadow-soft hover:shadow-soft-lg hover:-translate-y-1 ${
+                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 ${
                             selecionado
                               ? "bg-primary/10 border-primary ring-2 ring-primary/25"
                               : "bg-background/80 border-border/60 hover:border-primary/50"
                           }`}
                         >
-                          <div className="space-y-2">
+                          <div className="space-y-1.5">
                             <div className="flex items-start justify-between gap-2">
-                              <h3 className="font-display font-bold text-foreground text-base leading-snug">
+                              <h3 className="font-display font-bold text-foreground text-sm leading-snug">
                                 {servico.nome}
                               </h3>
                               <div
-                                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                                className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
                                   selecionado
                                     ? "bg-primary border-primary text-white"
                                     : "border-border/80 text-transparent"
                                 }`}
                               >
-                                <Check size={14} className="stroke-[3]" />
+                                <Check size={12} className="stroke-[3]" />
                               </div>
                             </div>
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/80 text-muted-foreground font-body text-xs font-semibold">
-                              <Clock size={12} className="text-primary" />
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-secondary/80 text-muted-foreground font-body text-[11px] font-semibold">
+                              <Clock size={11} className="text-primary" />
                               <span>{servico.duracao}</span>
                             </div>
                           </div>
 
-                          <div className="pt-3 border-t border-border/30 flex items-center justify-between">
-                            <span className="font-display font-extrabold text-foreground text-lg">
+                          <div className="pt-2 border-t border-border/30 flex items-center justify-between">
+                            <span className="font-display font-bold text-foreground text-base">
                               {servico.preco}
                             </span>
                             <span className="font-body text-xs font-bold text-primary flex items-center gap-1">
                               {selecionado ? (
-                                <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                                  <Check size={13} className="stroke-[3]" /> Selecionado
+                                <span className="text-emerald-600 font-extrabold flex items-center gap-1 text-[11px]">
+                                  <Check size={12} className="stroke-[3]" /> Selecionado
                                 </span>
                               ) : (
                                 <>
-                                  Selecionar <ArrowRight size={13} />
+                                  Selecionar <ArrowRight size={12} />
                                 </>
                               )}
                             </span>
@@ -1377,7 +1376,7 @@ function FluxoAgendamentoConteudo() {
                   </motion.div>
                 )}
 
-                {/* ── ETAPA 2: DATA E HORÁRIO ── */}
+                {/* ── ETAPA 2: DATA E HORÁRIO (Compacto) ── */}
                 {passoAtual === 2 && (
                   <motion.div
                     key="passo-2"
@@ -1385,44 +1384,42 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start"
+                    className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start"
                   >
                     {/* Coluna 1: Calendário Mensal */}
-                    <div className="md:col-span-6 bg-background/90 p-5 rounded-3xl border border-border/60 shadow-soft space-y-4">
-                      <div className="flex items-center justify-between pb-2 border-b border-border/30">
-                        <h3 className="font-display font-bold text-foreground text-base capitalize">
+                    <div className="md:col-span-6 bg-background/90 p-3.5 sm:p-4 rounded-2xl border border-border/60 shadow-soft space-y-2.5">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-border/30">
+                        <h3 className="font-display font-bold text-foreground text-sm capitalize">
                           {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
                         </h3>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                           <button
                             type="button"
                             onClick={mesAnterior}
-                            className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                            className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            <ChevronLeft size={18} />
+                            <ChevronLeft size={16} />
                           </button>
                           <button
                             type="button"
                             onClick={proximoMes}
-                            className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                            className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            <ChevronRight size={18} />
+                            <ChevronRight size={16} />
                           </button>
                         </div>
                       </div>
 
                       {/* Grade dos Dias */}
                       <div>
-                        {/* Dias da semana cabeçalho */}
-                        <div className="grid grid-cols-7 text-center mb-2">
+                        <div className="grid grid-cols-7 text-center mb-1">
                           {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
-                            <span key={i} className="font-body text-[10px] font-bold text-muted-foreground uppercase">
+                            <span key={i} className="font-body text-[9px] font-bold text-muted-foreground uppercase">
                               {d}
                             </span>
                           ))}
                         </div>
 
-                        {/* Células das datas */}
                         <div className="grid grid-cols-7 gap-1">
                           {(() => {
                             const inicioMes = startOfMonth(mesAtual);
@@ -1444,7 +1441,7 @@ function FluxoAgendamentoConteudo() {
                                   key={diaLoop.toISOString()}
                                   disabled={passado || !noMes}
                                   onClick={() => handleSelecionarData(diaLoop)}
-                                  className={`h-10 rounded-xl font-body text-xs font-bold transition-all flex items-center justify-center relative cursor-pointer disabled:cursor-not-allowed ${
+                                  className={`h-8 sm:h-9 rounded-lg font-body text-xs font-bold transition-all flex items-center justify-center relative cursor-pointer disabled:cursor-not-allowed ${
                                     !noMes
                                       ? "opacity-20 text-muted-foreground"
                                       : passado
@@ -1466,43 +1463,43 @@ function FluxoAgendamentoConteudo() {
                     </div>
 
                     {/* Coluna 2: Horários do Dia Escolhido */}
-                    <div className="md:col-span-6 bg-background/90 p-5 rounded-3xl border border-border/60 shadow-soft space-y-4">
-                      <div className="flex items-center justify-between pb-2 border-b border-border/30">
+                    <div className="md:col-span-6 bg-background/90 p-3.5 sm:p-4 rounded-2xl border border-border/60 shadow-soft space-y-2.5">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-border/30">
                         <div>
-                          <p className="text-[11px] font-body font-bold text-muted-foreground uppercase">
+                          <p className="text-[10px] font-body font-bold text-muted-foreground uppercase">
                             Data selecionada:
                           </p>
-                          <h3 className="font-display font-bold text-foreground text-sm capitalize">
+                          <h3 className="font-display font-bold text-foreground text-xs sm:text-sm capitalize">
                             {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })}
                           </h3>
                         </div>
-                        <CalendarCheck size={18} className="text-primary" />
+                        <CalendarCheck size={16} className="text-primary" />
                       </div>
 
                       {slotsDoDia.bloqueado ? (
-                        <div className="py-12 text-center text-muted-foreground space-y-2">
-                          <AlertTriangle size={28} className="mx-auto text-amber-500 mb-1" />
-                          <p className="font-display font-bold text-sm text-foreground">
+                        <div className="py-8 text-center text-muted-foreground space-y-1.5">
+                          <AlertTriangle size={24} className="mx-auto text-amber-500 mb-1" />
+                          <p className="font-display font-bold text-xs text-foreground">
                             Data sem atendimento
                           </p>
-                          <p className="font-body text-xs">
+                          <p className="font-body text-[11px]">
                             {slotsDoDia.motivo || "Escolha outro dia no calendário."}
                           </p>
                         </div>
                       ) : carregandoHorarios ? (
-                        <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-2">
-                          <Loader2 size={24} className="animate-spin text-primary" />
+                        <div className="py-8 flex flex-col items-center justify-center text-muted-foreground gap-1.5">
+                          <Loader2 size={20} className="animate-spin text-primary" />
                           <span className="font-body text-xs font-semibold">Buscando horários livres...</span>
                         </div>
                       ) : slotsDoDia.slots.length === 0 ? (
-                        <div className="py-12 text-center text-muted-foreground space-y-1">
-                          <p className="font-display font-bold text-sm text-foreground">
+                        <div className="py-8 text-center text-muted-foreground space-y-1">
+                          <p className="font-display font-bold text-xs text-foreground">
                             Nenhum horário disponível
                           </p>
-                          <p className="font-body text-xs">Todos os horários desta data já foram preenchidos.</p>
+                          <p className="font-body text-[11px]">Todos os horários desta data já foram preenchidos.</p>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto pr-0.5">
                           {slotsDoDia.slots.map((slot) => {
                             const ocupado = horariosOcupados.includes(slot);
                             const ativo = horarioSelecionado === slot;
@@ -1512,7 +1509,7 @@ function FluxoAgendamentoConteudo() {
                                 key={slot}
                                 disabled={ocupado}
                                 onClick={() => handleSelecionarHorario(slot)}
-                                className={`py-3 px-2 rounded-xl text-xs font-body font-bold transition-all border flex flex-col items-center justify-center gap-0.5 cursor-pointer disabled:cursor-not-allowed ${
+                                className={`py-2 px-1.5 rounded-lg text-xs font-body font-bold transition-all border flex flex-col items-center justify-center gap-0.5 cursor-pointer disabled:cursor-not-allowed ${
                                   ocupado
                                     ? "bg-secondary/40 border-border/30 text-muted-foreground/35 line-through opacity-50"
                                     : ativo
@@ -1533,7 +1530,7 @@ function FluxoAgendamentoConteudo() {
                   </motion.div>
                 )}
 
-                {/* ── ETAPA 3: IDENTIFICAÇÃO / AUTENTICAÇÃO (Espaçamento Aumentado) ── */}
+                {/* ── ETAPA 3: IDENTIFICAÇÃO / AUTENTICAÇÃO (Compacto) ── */}
                 {passoAtual === 3 && (
                   <motion.div
                     key="passo-3"
@@ -1541,125 +1538,112 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="max-w-md mx-auto w-full space-y-6 py-4 sm:py-6"
+                    className="max-w-md mx-auto w-full space-y-3 py-1"
                   >
                     {/* Cenário A: Conta de Administrador detectada */}
                     {isContaGestor ? (
-                      <div className="p-6 sm:p-8 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-center space-y-4 shadow-soft">
-                        <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
-                          <AlertTriangle size={32} />
+                      <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-3 shadow-soft">
+                        <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+                          <AlertTriangle size={24} />
                         </div>
                         <div>
-                          <span className="text-[11px] font-body uppercase font-bold text-amber-700 dark:text-amber-300 tracking-wider">
+                          <span className="text-[10px] font-body uppercase font-bold text-amber-700 dark:text-amber-300 tracking-wider">
                             Perfil de Administrador
                           </span>
-                          <h3 className="font-display font-extrabold text-xl text-foreground mt-1">
+                          <h3 className="font-display font-bold text-base text-foreground mt-0.5">
                             Conta do Gestor Conectada
                           </h3>
-                          <p className="font-body text-xs text-muted-foreground mt-2 leading-relaxed">
-                            Você está conectado com a conta de gestor de <strong className="text-foreground">{profissional.nomeClinica}</strong>. Para simular e agendar uma consulta como paciente, utilize o botão abaixo para trocar de conta ou acesse em uma janela anônima.
+                          <p className="font-body text-xs text-muted-foreground mt-1 leading-relaxed">
+                            Você está conectado com a conta de gestor de <strong className="text-foreground">{profissional.nomeClinica}</strong>. Troque de conta para agendar como paciente.
                           </p>
                         </div>
 
-                        <div className="pt-3 border-t border-amber-500/20 flex flex-col sm:flex-row gap-3">
+                        <div className="pt-2 border-t border-amber-500/20">
                           <button
                             type="button"
                             onClick={handleTrocarConta}
                             disabled={salvando}
-                            className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-body font-bold text-xs shadow-soft transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-body font-bold text-xs shadow-soft transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                           >
-                            <LogOut size={14} />
+                            <LogOut size={13} />
                             <span>Trocar de Conta</span>
                           </button>
                         </div>
                       </div>
                     ) : clienteLogado ? (
                       /* Cenário B: Paciente reconhecido */
-                      <div className="p-6 sm:p-8 rounded-3xl bg-background border border-border shadow-soft text-center space-y-5">
-                        <div className="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center font-display font-extrabold text-2xl shadow-inner">
+                      <div className="p-4 sm:p-5 rounded-2xl bg-background border border-border shadow-soft text-center space-y-3">
+                        <div className="w-12 h-12 rounded-xl bg-primary/15 text-primary mx-auto flex items-center justify-center font-display font-extrabold text-xl shadow-inner">
                           {clienteLogado.nome.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <span className="text-[11px] font-body uppercase font-bold text-muted-foreground tracking-wider">
-                            Paciente Reconhecido
+                          <span className="text-[10px] font-body uppercase font-bold text-muted-foreground tracking-wider">
+                            Agendando como
                           </span>
-                          <h3 className="font-display font-extrabold text-xl text-foreground mt-0.5">
+                          <h3 className="font-display font-bold text-base sm:text-lg text-foreground mt-0.5">
                             {clienteLogado.nome}
                           </h3>
-                          <p className="font-body text-xs text-muted-foreground mt-1">
+                          <p className="font-body text-xs text-muted-foreground mt-0.5">
                             {clienteLogado.telefone ? mascararTelefone(clienteLogado.telefone) : clienteLogado.email}
                           </p>
                         </div>
 
-                        <div className="pt-3 border-t border-border/30 flex items-center justify-between gap-3">
+                        <div className="pt-2.5 border-t border-border/30 flex flex-col sm:flex-row items-center justify-between gap-2.5">
                           <button
                             type="button"
                             onClick={handleTrocarConta}
                             disabled={salvando}
-                            className="text-xs font-body font-bold text-muted-foreground hover:text-rose-500 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-border/70 hover:bg-secondary text-xs font-body font-bold text-muted-foreground hover:text-rose-500 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <LogOut size={13} />
-                            Trocar de Conta
+                            Trocar de conta / Sair
                           </button>
                           <button
                             type="button"
                             onClick={() => navegarParaPasso(4)}
-                            className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-5 py-2 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
                           >
-                            Continuar com esta conta
+                            <span>Continuar com esta conta</span>
+                            <ArrowRight size={13} />
                           </button>
                         </div>
                       </div>
                     ) : (
                       /* Cenário C: Formulário e Google OAuth Unificado */
-                      <div className="bg-background p-6 sm:p-8 rounded-3xl border border-border shadow-soft space-y-6">
-                        {/* Botão de Destaque Google OAuth (Cadastro e Login em 1 clique) */}
+                      <div className="bg-background p-4 sm:p-5 rounded-2xl border border-border shadow-soft space-y-3">
+                        {/* Botão de Destaque Google OAuth */}
                         <motion.button
-                          whileHover={iniciandoGoogle ? {} : { scale: 1.02, y: -1 }}
-                          whileTap={iniciandoGoogle ? {} : { scale: 0.98 }}
+                          whileHover={iniciandoGoogle ? {} : { scale: 1.01 }}
+                          whileTap={iniciandoGoogle ? {} : { scale: 0.99 }}
                           onClick={handleLoginGoogle}
                           disabled={iniciandoGoogle || salvando}
                           type="button"
-                          className="w-full flex items-center justify-center gap-3 py-3.5 px-5 rounded-2xl bg-white text-slate-700 hover:text-slate-900 font-body font-bold text-sm border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white text-slate-700 hover:text-slate-900 font-body font-bold text-xs border border-slate-200/80 shadow-soft transition-all cursor-pointer disabled:opacity-60"
                         >
                           {iniciandoGoogle ? (
                             <>
-                              <Loader2 size={18} className="animate-spin text-primary" />
+                              <Loader2 size={15} className="animate-spin text-primary" />
                               <span>Conectando ao Google...</span>
                             </>
                           ) : (
                             <>
-                              {/* Ícone Autêntico SVG do Google */}
-                              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                                <path
-                                  fill="#4285F4"
-                                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                                />
-                                <path
-                                  fill="#34A853"
-                                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.27 21.36 7.37 24 12 24z"
-                                />
-                                <path
-                                  fill="#FBBC05"
-                                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.97 0 12s.46 3.84 1.26 5.42l4.02-3.15z"
-                                />
-                                <path
-                                  fill="#EA4335"
-                                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                                />
+                              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
+                                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.27 21.36 7.37 24 12 24z" />
+                                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.97 0 12s.46 3.84 1.26 5.42l4.02-3.15z" />
+                                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                               </svg>
                               <span>Continuar com Google</span>
                             </>
                           )}
                         </motion.button>
 
-                        {/* Divisor Visual */}
                         <div className="relative flex items-center justify-center">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-border/50" />
                           </div>
-                          <span className="relative bg-background px-3 text-[11px] font-body font-semibold uppercase tracking-wider text-muted-foreground/70">
-                            ou com e-mail e senha
+                          <span className="relative bg-background px-2.5 text-[10px] font-body font-semibold uppercase tracking-wider text-muted-foreground/70">
+                            ou com e-mail
                           </span>
                         </div>
 
@@ -1668,7 +1652,7 @@ function FluxoAgendamentoConteudo() {
                           <button
                             type="button"
                             onClick={() => setAbaAuth("cadastro")}
-                            className={`py-2 rounded-lg transition-all cursor-pointer ${
+                            className={`py-1.5 rounded-lg transition-all cursor-pointer ${
                               abaAuth === "cadastro"
                                 ? "bg-card text-foreground shadow-xs"
                                 : "text-muted-foreground hover:text-foreground"
@@ -1679,7 +1663,7 @@ function FluxoAgendamentoConteudo() {
                           <button
                             type="button"
                             onClick={() => setAbaAuth("login")}
-                            className={`py-2 rounded-lg transition-all cursor-pointer ${
+                            className={`py-1.5 rounded-lg transition-all cursor-pointer ${
                               abaAuth === "login"
                                 ? "bg-card text-foreground shadow-xs"
                                 : "text-muted-foreground hover:text-foreground"
@@ -1690,38 +1674,37 @@ function FluxoAgendamentoConteudo() {
                         </div>
 
                         {abaAuth === "login" ? (
-                          /* Formulário de Login */
-                          <form onSubmit={handleLoginInline} className="space-y-4">
-                            <div className="space-y-1.5">
-                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                          <form onSubmit={handleLoginInline} className="space-y-2.5">
+                            <div className="space-y-1">
+                              <label className="font-body text-[11px] font-bold text-muted-foreground uppercase">
                                 E-mail
                               </label>
                               <div className="relative">
-                                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                                 <input
                                   type="email"
                                   required
                                   value={loginEmail}
                                   onChange={(e) => setLoginEmail(e.target.value)}
                                   placeholder="seu@email.com"
-                                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                                 />
                               </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                            <div className="space-y-1">
+                              <label className="font-body text-[11px] font-bold text-muted-foreground uppercase">
                                 Senha
                               </label>
                               <div className="relative">
-                                <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                                 <input
                                   type="password"
                                   required
                                   value={loginSenha}
                                   onChange={(e) => setLoginSenha(e.target.value)}
-                                  placeholder="Sua senha secreta"
-                                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                  placeholder="Sua senha"
+                                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                                 />
                               </div>
                             </div>
@@ -1729,17 +1712,16 @@ function FluxoAgendamentoConteudo() {
                             <button
                               type="submit"
                               disabled={salvando}
-                              className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
                             >
-                              {salvando ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                              {salvando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                               Entrar e Continuar
                             </button>
                           </form>
                         ) : (
-                          /* Formulário de Cadastro */
-                          <form onSubmit={handleCadastroInline} className="space-y-3.5">
-                            <div className="space-y-1">
-                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                          <form onSubmit={handleCadastroInline} className="space-y-2">
+                            <div className="space-y-0.5">
+                              <label className="font-body text-[10px] font-bold text-muted-foreground uppercase">
                                 Nome Completo
                               </label>
                               <input
@@ -1748,13 +1730,13 @@ function FluxoAgendamentoConteudo() {
                                 value={cadNome}
                                 onChange={(e) => setCadNome(e.target.value)}
                                 placeholder="Seu nome completo"
-                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                               />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2.5">
-                              <div className="space-y-1">
-                                <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-0.5">
+                                <label className="font-body text-[10px] font-bold text-muted-foreground uppercase">
                                   WhatsApp
                                 </label>
                                 <input
@@ -1763,12 +1745,12 @@ function FluxoAgendamentoConteudo() {
                                   value={cadWhatsapp}
                                   onChange={(e) => setCadWhatsapp(mascararTelefone(e.target.value))}
                                   placeholder="(11) 99999-9999"
-                                  className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                  className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                                 />
                               </div>
 
-                              <div className="space-y-1">
-                                <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                              <div className="space-y-0.5">
+                                <label className="font-body text-[10px] font-bold text-muted-foreground uppercase">
                                   CPF
                                 </label>
                                 <input
@@ -1777,13 +1759,13 @@ function FluxoAgendamentoConteudo() {
                                   value={cadCpf}
                                   onChange={(e) => setCadCpf(mascararCPF(e.target.value))}
                                   placeholder="000.000.000-00"
-                                  className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                  className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                                 />
                               </div>
                             </div>
 
-                            <div className="space-y-1">
-                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
+                            <div className="space-y-0.5">
+                              <label className="font-body text-[10px] font-bold text-muted-foreground uppercase">
                                 E-mail
                               </label>
                               <input
@@ -1792,13 +1774,13 @@ function FluxoAgendamentoConteudo() {
                                 value={cadEmail}
                                 onChange={(e) => setCadEmail(e.target.value)}
                                 placeholder="seu@email.com"
-                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                               />
                             </div>
 
-                            <div className="space-y-1">
-                              <label className="font-body text-xs font-bold text-muted-foreground uppercase">
-                                Criar Senha
+                            <div className="space-y-0.5">
+                              <label className="font-body text-[10px] font-bold text-muted-foreground uppercase">
+                                Senha
                               </label>
                               <input
                                 type="password"
@@ -1807,16 +1789,16 @@ function FluxoAgendamentoConteudo() {
                                 value={cadSenha}
                                 onChange={(e) => setCadSenha(e.target.value)}
                                 placeholder="Mínimo 6 caracteres"
-                                className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                                className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-body font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
                               />
                             </div>
 
                             <button
                               type="submit"
                               disabled={salvando}
-                              className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
                             >
-                              {salvando ? <Loader2 size={16} className="animate-spin" /> : <UserCheck size={16} />}
+                              {salvando ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
                               Cadastrar e Continuar
                             </button>
                           </form>
@@ -1826,7 +1808,7 @@ function FluxoAgendamentoConteudo() {
                   </motion.div>
                 )}
 
-                {/* ── ETAPA 4: CONFIRMAÇÃO & RECIBO (Espaçamento Superior Ajustado) ── */}
+                {/* ── ETAPA 4: CONFIRMAÇÃO & RECIBO (Compacto) ── */}
                 {passoAtual === 4 && (
                   <motion.div
                     key="passo-4"
@@ -1834,85 +1816,82 @@ function FluxoAgendamentoConteudo() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 16 }}
                     transition={{ duration: 0.25 }}
-                    className="max-w-lg mx-auto w-full space-y-6 pt-3 sm:pt-5 pb-2"
+                    className="max-w-md mx-auto w-full space-y-3 py-1"
                   >
-                    {/* Card Recibo em Destaque */}
-                    <div className="p-6 rounded-3xl bg-background border border-border/80 shadow-soft space-y-5">
-                      <div className="flex items-center justify-between border-b border-border/30 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <Receipt size={18} className="text-primary" />
-                          <h3 className="font-display font-bold text-foreground text-base">
+                    {/* Card Recibo Compacto */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-background border border-border/80 shadow-soft space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-border/30 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Receipt size={16} className="text-primary" />
+                          <h3 className="font-display font-bold text-foreground text-sm sm:text-base">
                             Recibo do Agendamento
                           </h3>
                         </div>
                         <span className="text-[10px] font-body font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 border border-amber-500/30 uppercase">
-                          Pendente de Confirmação
+                          Pendente
                         </span>
                       </div>
 
-                      <div className="space-y-3.5 text-xs font-body">
-                        <div className="flex items-center justify-between py-1 border-b border-border/20">
-                          <span className="text-muted-foreground font-bold">Serviço:</span>
-                          <span className="font-display font-bold text-foreground text-sm">
+                      <div className="space-y-1.5 text-xs font-body">
+                        <div className="flex items-center justify-between py-0.5 border-b border-border/20">
+                          <span className="text-muted-foreground font-semibold">Serviço:</span>
+                          <span className="font-display font-bold text-foreground truncate max-w-[200px]">
                             {servicoEscolhido?.nome}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-border/20">
-                          <span className="text-muted-foreground font-bold">Valor & Duração:</span>
+                        <div className="flex items-center justify-between py-0.5 border-b border-border/20">
+                          <span className="text-muted-foreground font-semibold">Valor & Duração:</span>
                           <span className="font-bold text-foreground">
                             {servicoEscolhido?.preco} • {servicoEscolhido?.duracao}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-border/20">
-                          <span className="text-muted-foreground font-bold">Data & Horário:</span>
+                        <div className="flex items-center justify-between py-0.5 border-b border-border/20">
+                          <span className="text-muted-foreground font-semibold">Data & Horário:</span>
                           <span className="font-bold text-primary capitalize">
                             {format(dataSelecionada, "EEEE, dd 'de' MMMM", { locale: ptBR })} às {horarioSelecionado}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between py-1 border-b border-border/20">
-                          <span className="text-muted-foreground font-bold">Paciente:</span>
-                          <span className="font-bold text-foreground">{clienteLogado?.nome}</span>
+                        <div className="flex items-center justify-between py-0.5 border-b border-border/20">
+                          <span className="text-muted-foreground font-semibold">Paciente:</span>
+                          <span className="font-bold text-foreground truncate max-w-[200px]">{clienteLogado?.nome}</span>
                         </div>
 
                         {clienteLogado?.telefone && (
-                          <div className="flex items-center justify-between py-1 border-b border-border/20">
-                            <span className="text-muted-foreground font-bold">WhatsApp:</span>
+                          <div className="flex items-center justify-between py-0.5 border-b border-border/20">
+                            <span className="text-muted-foreground font-semibold">WhatsApp:</span>
                             <span className="font-bold text-foreground">
                               {mascararTelefone(clienteLogado.telefone)}
                             </span>
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between py-1">
-                          <span className="text-muted-foreground font-bold">Local / Clínica:</span>
-                          <span className="font-bold text-foreground">{profissional.nomeClinica}</span>
+                        <div className="flex items-center justify-between py-0.5">
+                          <span className="text-muted-foreground font-semibold">Clínica:</span>
+                          <span className="font-bold text-foreground truncate max-w-[200px]">{profissional.nomeClinica}</span>
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/15 text-[11px] font-body text-muted-foreground">
-                        <p className="leading-relaxed">
-                          Ao confirmar, sua solicitação será enviada diretamente à agenda do profissional.
-                          Você receberá a confirmação por WhatsApp.
-                        </p>
+                      <div className="p-2 rounded-xl bg-primary/5 border border-primary/15 text-[10px] font-body text-muted-foreground leading-snug">
+                        Ao confirmar, sua solicitação será enviada diretamente à agenda da clínica e você receberá confirmação por WhatsApp.
                       </div>
 
                       <button
                         type="button"
                         disabled={salvando}
                         onClick={handleConfirmarAgendamento}
-                        className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-body font-bold text-sm shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="w-full py-2.5 sm:py-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs sm:text-sm shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         {salvando ? (
                           <>
-                            <Loader2 size={18} className="animate-spin" />
+                            <Loader2 size={16} className="animate-spin" />
                             Finalizando Agendamento...
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 size={18} />
+                            <CheckCircle2 size={16} />
                             Confirmar Agendamento Agora
                           </>
                         )}
@@ -1924,14 +1903,14 @@ function FluxoAgendamentoConteudo() {
             </div>
 
             {/* ── Barra de Navegação Inferior (Voltar / Avançar) ── */}
-            <div className="pt-8 mt-8 border-t border-border/30 flex items-center justify-between gap-4">
+            <div className="pt-2.5 mt-2.5 border-t border-border/30 flex items-center justify-between gap-3">
               {passoAtual > 1 ? (
                 <button
                   type="button"
                   onClick={() => navegarParaPasso((passoAtual - 1) as EtapaFluxo)}
-                  className="px-5 py-2.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <ArrowLeft size={15} />
+                  <ArrowLeft size={14} />
                   Voltar
                 </button>
               ) : (
@@ -1943,10 +1922,10 @@ function FluxoAgendamentoConteudo() {
                   type="button"
                   disabled={!servicoEscolhido}
                   onClick={() => navegarParaPasso(2)}
-                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este serviço
-                  <ArrowRight size={15} />
+                  <ArrowRight size={14} />
                 </button>
               )}
 
@@ -1955,10 +1934,10 @@ function FluxoAgendamentoConteudo() {
                   type="button"
                   disabled={!horarioSelecionado}
                   onClick={() => navegarParaPasso(3)}
-                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este horário
-                  <ArrowRight size={15} />
+                  <ArrowRight size={14} />
                 </button>
               )}
 
@@ -1966,10 +1945,10 @@ function FluxoAgendamentoConteudo() {
                 <button
                   type="button"
                   onClick={() => navegarParaPasso(4)}
-                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   Continuar para o Resumo
-                  <ArrowRight size={15} />
+                  <ArrowRight size={14} />
                 </button>
               )}
             </div>
