@@ -14,9 +14,10 @@ ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS disponibilidade JSONB;
 
--- Colunas complementares para servicos
+-- Colunas complementares para servicos e agendamentos
 ALTER TABLE public.servicos ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE public.servicos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+ALTER TABLE public.agendamentos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
 
 -- ------------------------------------------------------------------------------
 -- 2. ATIVAÇÃO DE ROW LEVEL SECURITY (RLS) EM TODAS AS TABELAS SENSÍVEIS
@@ -194,7 +195,7 @@ USING (
 );
 
 -- ------------------------------------------------------------------------------
--- 6. POLÍTICAS RLS: TABELA 'agendamentos'
+-- 6. POLÍTICAS RLS & TRIGGERS: TABELA 'agendamentos'
 -- ------------------------------------------------------------------------------
 -- Leitura dos agendamentos detalhados (apenas o profissional ou o paciente que agendou)
 CREATE POLICY "agendamentos_select_authenticated"
@@ -209,6 +210,7 @@ USING (
           AND (empresas.user_id = auth.uid() OR empresas.auth_user_id = auth.uid())
     )
     -- Ou o próprio paciente que realizou a consulta
+    OR user_id = auth.uid()
     OR cliente_id IN (
         SELECT id FROM public.clientes WHERE auth_user_id = auth.uid()
     )
@@ -230,7 +232,8 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
     -- O cliente deve ser o paciente logado ou o agendamento deve pertencer à clínica do admin
-    cliente_id IN (
+    user_id = auth.uid()
+    OR cliente_id IN (
         SELECT id FROM public.clientes WHERE auth_user_id = auth.uid()
     )
     OR EXISTS (
@@ -240,8 +243,8 @@ WITH CHECK (
     )
 );
 
--- Atualização: Dono da clínica ou o próprio paciente
-CREATE POLICY "agendamentos_update_restricted"
+-- Atualização para o Dono da clínica (total controle de gestão)
+CREATE POLICY "agendamentos_update_owner"
 ON public.agendamentos
 FOR UPDATE
 TO authenticated
@@ -251,10 +254,70 @@ USING (
         WHERE empresas.id = agendamentos.empresa_id
           AND (empresas.user_id = auth.uid() OR empresas.auth_user_id = auth.uid())
     )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.empresas
+        WHERE empresas.id = agendamentos.empresa_id
+          AND (empresas.user_id = auth.uid() OR empresas.auth_user_id = auth.uid())
+    )
+);
+
+-- Atualização restrita para o Paciente: PERMITIDO APENAS CANCELAMENTO (status = 'Cancelado')
+CREATE POLICY "agendamentos_update_patient_cancel"
+ON public.agendamentos
+FOR UPDATE
+TO authenticated
+USING (
+    user_id = auth.uid()
     OR cliente_id IN (
         SELECT id FROM public.clientes WHERE auth_user_id = auth.uid()
     )
+)
+WITH CHECK (
+    (
+        user_id = auth.uid()
+        OR cliente_id IN (
+            SELECT id FROM public.clientes WHERE auth_user_id = auth.uid()
+        )
+    )
+    AND LOWER(status) IN ('cancelado', 'cancelada')
 );
+
+-- Trigger de Validação de Integridade: impede alteração acidental de data, horário, serviço, clínica ou valor pelo paciente
+CREATE OR REPLACE FUNCTION public.fn_validate_patient_agendamento_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Se o usuário atual NÃO for o dono da clínica
+  IF NOT EXISTS (
+    SELECT 1 FROM public.empresas
+    WHERE empresas.id = OLD.empresa_id
+      AND (empresas.user_id = auth.uid() OR empresas.auth_user_id = auth.uid())
+  ) THEN
+    -- Bloqueia alterações em qualquer coluna além do status
+    IF NEW.data <> OLD.data 
+       OR NEW.horario <> OLD.horario 
+       OR NEW.servico_id IS DISTINCT FROM OLD.servico_id
+       OR NEW.servico_nome IS DISTINCT FROM OLD.servico_nome
+       OR NEW.empresa_id <> OLD.empresa_id
+       OR NEW.cliente_id <> OLD.cliente_id THEN
+      RAISE EXCEPTION 'Pacientes só têm permissão para alterar o status do agendamento (cancelamento).';
+    END IF;
+
+    IF LOWER(NEW.status) NOT IN ('cancelado', 'cancelada') THEN
+      RAISE EXCEPTION 'Pacientes só podem alterar o status para Cancelado.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_validate_patient_agendamento_update ON public.agendamentos;
+CREATE TRIGGER trg_validate_patient_agendamento_update
+BEFORE UPDATE ON public.agendamentos
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_validate_patient_agendamento_update();
 
 -- Exclusão: Apenas o dono da clínica
 CREATE POLICY "agendamentos_delete_owner"

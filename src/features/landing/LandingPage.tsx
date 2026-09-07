@@ -35,6 +35,8 @@ import {
   Calendar as CalendarIcon,
   Receipt,
   RotateCcw,
+  LogIn,
+  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -42,6 +44,8 @@ import { useProfessional, extrairMinutos, type Servico } from "../../store/usePr
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
+import { ModalAuthPaciente } from "../../components/ModalAuthPaciente";
+import { ModalMeusAgendamentos } from "../../components/ModalMeusAgendamentos";
 
 export default function LandingPage() {
   return (
@@ -179,6 +183,11 @@ function FluxoAgendamentoConteudo() {
   const [cadCpf, setCadCpf] = useState("");
   const [cadEmail, setCadEmail] = useState("");
   const [cadSenha, setCadSenha] = useState("");
+
+  // Modais de Autenticação e Meus Agendamentos
+  const [modalAuthAberto, setModalAuthAberto] = useState(false);
+  const [modalMeusAgendamentosAberto, setModalMeusAgendamentosAberto] = useState(false);
+  const [menuDropdownAberto, setMenuDropdownAberto] = useState(false);
 
   // ── Etapa 4: Confirmação & Submissão ──
   const [salvando, setSalvando] = useState(false);
@@ -643,6 +652,7 @@ function FluxoAgendamentoConteudo() {
       };
 
       setClienteLogado(clienteFinal);
+      exibirToast(`Login realizado com sucesso! Bem-vindo(a), ${clienteFinal.nome.split(" ")[0]}.`, "success");
       navegarParaPasso(4); // Avança magicamente direto para a confirmação
     } catch (err) {
       console.error("[LandingPage] Erro no login:", err);
@@ -739,10 +749,39 @@ function FluxoAgendamentoConteudo() {
       };
 
       setClienteLogado(clienteFinal);
+      exibirToast(`Cadastro concluído com sucesso! Bem-vindo(a), ${clienteFinal.nome.split(" ")[0]}.`, "success");
       navegarParaPasso(4); // Avança magicamente direto para a confirmação
     } catch (err) {
       console.error("[LandingPage] Erro inesperado ao cadastrar:", err);
       exibirToast("Erro de conexão ao processar cadastro.", "error");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleSucessoAuthModal = (cliente: ClienteAutenticado) => {
+    setClienteLogado(cliente);
+    setModalAuthAberto(false);
+    exibirToast(`Login realizado com sucesso! Bem-vindo(a), ${cliente.nome.split(" ")[0]}.`, "success");
+  };
+
+  const handleDeslogarCliente = async () => {
+    try {
+      setSalvando(true);
+      await signOut();
+      setClienteLogado(null);
+      setIsContaGestor(false);
+      setLoginEmail("");
+      setLoginSenha("");
+      setCadNome("");
+      setCadWhatsapp("");
+      setCadCpf("");
+      setCadEmail("");
+      setCadSenha("");
+      exibirToast("Você saiu da sua conta com sucesso.", "info");
+    } catch (e) {
+      console.error("[LandingPage] Erro ao deslogar:", e);
+      exibirToast("Erro ao encerrar sessão.", "error");
     } finally {
       setSalvando(false);
     }
@@ -778,6 +817,7 @@ function FluxoAgendamentoConteudo() {
       setCadCpf("");
       setCadEmail("");
       setCadSenha("");
+      exibirToast("Você saiu da sua conta.", "info");
       // Permanece estritamente na Etapa 3 com as escolhas (serviço, data, hora) intactas
       navegarParaPasso(3);
     } catch (e) {
@@ -911,12 +951,13 @@ function FluxoAgendamentoConteudo() {
         return;
       }
 
-      // 🛡️ 2. Inserção Segura do Agendamento usando obrigatoriamente cliente_id autenticado
+      // 🛡️ 2. Inserção Segura do Agendamento usando obrigatoriamente cliente_id autenticado e user_id
       const dataHoraIso = `${dataStr}T${horarioSelecionado}:00Z`;
 
       const { error: insertError } = await supabase.from("agendamentos").insert({
         empresa_id: profissional.id,
         cliente_id: clienteIdParaInsert,
+        user_id: currentUser.id,
         nome_cliente: clienteNome,
         whatsapp_cliente: clienteTel,
         cliente_telefone: clienteTel,
@@ -1004,6 +1045,114 @@ function FluxoAgendamentoConteudo() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Top Header Público da Clínica & Autenticação do Paciente ── */}
+      <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-2 sm:py-3 px-2 sm:px-4 mb-2 shrink-0">
+        {/* Logo / Nome da Clínica */}
+        <div className="flex items-center gap-3">
+          {profissional.logoUrl ? (
+            <img
+              src={profissional.logoUrl}
+              alt={profissional.nomeClinica}
+              className="w-10 h-10 rounded-2xl object-cover shadow-soft border border-border/50"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-display font-extrabold text-base border border-primary/20 shadow-soft">
+              {profissional.nomeClinica.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h2 className="font-display font-bold text-sm sm:text-base text-foreground leading-tight">
+              {profissional.nomeClinica}
+            </h2>
+            <p className="font-body text-[11px] text-muted-foreground font-medium">
+              {profissional.profissao || profissional.tagline || "Agendamento Online"}
+            </p>
+          </div>
+        </div>
+
+        {/* Área de Autenticação do Cliente */}
+        <div className="relative">
+          {user && clienteLogado ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuDropdownAberto(!menuDropdownAberto)}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-card hover:bg-secondary/50 border border-border/80 shadow-soft transition-all text-foreground cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center font-display font-bold text-xs shadow-inner">
+                  {clienteLogado.nome ? clienteLogado.nome.charAt(0).toUpperCase() : "P"}
+                </div>
+                <span className="font-body text-xs font-bold max-w-[120px] sm:max-w-[160px] truncate hidden sm:inline">
+                  {clienteLogado.nome.split(" ")[0]}
+                </span>
+                <ChevronDown size={14} className="text-muted-foreground" />
+              </button>
+
+              {/* Dropdown Menu */}
+              <AnimatePresence>
+                {menuDropdownAberto && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMenuDropdownAberto(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-56 rounded-2xl bg-card border border-border shadow-floating z-50 p-2 space-y-1"
+                    >
+                      <div className="px-3 py-2 border-b border-border/40 mb-1">
+                        <p className="font-display font-bold text-xs text-foreground truncate">
+                          {clienteLogado.nome}
+                        </p>
+                        <p className="font-body text-[11px] text-muted-foreground truncate">
+                          {clienteLogado.email || (clienteLogado.telefone ? mascararTelefone(clienteLogado.telefone) : user.email)}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuDropdownAberto(false);
+                          setModalMeusAgendamentosAberto(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-body font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer text-left"
+                      >
+                        <CalendarDays size={15} className="text-primary" />
+                        <span>Meus Agendamentos</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMenuDropdownAberto(false);
+                          await handleDeslogarCliente();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-body font-semibold text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-left"
+                      >
+                        <LogOut size={15} />
+                        <span>Sair da Conta</span>
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setModalAuthAberto(true)}
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-card hover:bg-secondary/70 border border-border/80 font-body font-bold text-xs text-foreground shadow-soft transition-all cursor-pointer"
+            >
+              <LogIn size={14} className="text-primary" />
+              <span>Entrar / Cadastrar</span>
+            </button>
+          )}
+        </div>
+      </header>
 
       {/* ── Stepper com Linha do Tempo (Centrado com precisão matemática, sem extrapolar) ── */}
       {!sucessoFinal && (
@@ -1827,6 +1976,27 @@ function FluxoAgendamentoConteudo() {
           </>
         )}
       </div>
+
+      {/* ── Modal de Autenticação do Paciente ── */}
+      <ModalAuthPaciente
+        aberto={modalAuthAberto}
+        onFechar={() => setModalAuthAberto(false)}
+        empresaId={profissional.id}
+        nomeClinica={profissional.nomeClinica}
+        onSucesso={handleSucessoAuthModal}
+      />
+
+      {/* ── Modal Meus Agendamentos com Regra de 24h ── */}
+      <ModalMeusAgendamentos
+        aberto={modalMeusAgendamentosAberto}
+        onFechar={() => setModalMeusAgendamentosAberto(false)}
+        empresaId={profissional.id}
+        nomeClinica={profissional.nomeClinica}
+        telefoneClinica={profissional.telefone}
+        clienteId={clienteLogado?.id}
+        userId={user?.id}
+        onToast={exibirToast}
+      />
     </div>
   );
 }
