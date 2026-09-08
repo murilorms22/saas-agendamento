@@ -85,8 +85,6 @@ async function enviarMensagemWhatsApp({
   const endpoint = `${urlLimpa}/message/sendText/${instance}`;
 
   try {
-    console.log(`[Evolution API] Enviando mensagem para ${numero} via instância "${instance}"...`);
-
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -140,7 +138,6 @@ Deno.serve(async (req: Request) => {
 
     const type = payload.type || (payload.record ? "INSERT" : "");
     const record: WebhookRecord = payload.record || payload;
-    const oldRecord: WebhookRecord | null = payload.old_record || null;
 
     if (!record || !record.id) {
       return new Response(
@@ -155,19 +152,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const statusAtual = (record.status || "").trim().toLowerCase();
-    const statusAntigo = (oldRecord?.status || "").trim().toLowerCase();
-
-    const isNovoAgendamento = type === "INSERT";
+    // ── 1. Validação Flexível de Evento (não exige old_record) ──────────────────
+    const status = String(record?.status || "").trim().toLowerCase();
     const isCancelamento =
-      type === "UPDATE" &&
-      (statusAtual === "cancelado" || statusAtual === "cancelada") &&
-      statusAntigo !== "cancelado" &&
-      statusAntigo !== "cancelada";
+      (type === "UPDATE" || type === "INSERT") &&
+      (status === "cancelado" || status === "cancelada");
+    const isNovoAgendamento =
+      type === "INSERT" && status !== "cancelado" && status !== "cancelada";
 
     if (!isNovoAgendamento && !isCancelamento) {
       console.log(
-        `[Evento Ignorado] Tipo: "${type}", Status Atual: "${record.status}", Status Anterior: "${oldRecord?.status}"`
+        `[Evento Ignorado] Tipo: "${type}", Status: "${record.status}"`
       );
       return new Response(
         JSON.stringify({
@@ -182,40 +177,112 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(
-      `[Processando Agendamento #${record.id}] Tipo: ${type} (isNovo: ${isNovoAgendamento}, isCancelamento: ${isCancelamento}) | Empresa ID: ${record.empresa_id}`
+      `[Processando Agendamento #${record.id}] Tipo: ${type} | isCancelamento: ${isCancelamento} | isNovoAgendamento: ${isNovoAgendamento}`
     );
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    let nomeClinica = "Praxis";
-    let telefoneClinica: string | null = null;
-    let nomeServico = record.servico_nome || record.servico || "Consulta";
-    let precoServico = "";
-    let duracaoServico = "";
+    // ── 2. Hidratação Completa dos Dados (Fallback via SELECT no Banco) ────────
+    let dbAgendamento: any = null;
+    try {
+      const { data: agData, error: agErr } = await supabase
+        .from("agendamentos")
+        .select(`
+          *,
+          clientes:cliente_id (id, nome, telefone),
+          servicos:servico_id (id, nome, preco, duracao),
+          empresas:empresa_id (id, nome_negocio, telefone)
+        `)
+        .eq("id", record.id)
+        .maybeSingle();
 
-    // 1. Busca Dados da Empresa
-    const targetEmpresaId = record.empresa_id;
-    if (targetEmpresaId) {
-      const { data: empresa, error: erroEmpresa } = await supabase
+      if (!agErr && agData) {
+        dbAgendamento = agData;
+      } else {
+        // Fallback para select simples se houver problema com joins
+        const { data: agSimples } = await supabase
+          .from("agendamentos")
+          .select("*")
+          .eq("id", record.id)
+          .maybeSingle();
+        if (agSimples) dbAgendamento = agSimples;
+      }
+    } catch (hydrateErr) {
+      console.warn("[Aviso] Erro durante hidratação do agendamento:", hydrateErr);
+    }
+
+    // Dados consolidados do agendamento
+    const targetEmpresaId = record.empresa_id || dbAgendamento?.empresa_id;
+    const targetServicoId = record.servico_id || dbAgendamento?.servico_id;
+
+    // Resolução do Nome do Paciente
+    const nomePaciente =
+      record.cliente_nome ||
+      record.nome_cliente ||
+      record.nome ||
+      dbAgendamento?.cliente_nome ||
+      dbAgendamento?.nome_cliente ||
+      dbAgendamento?.clientes?.nome ||
+      "Paciente";
+
+    // Resolução do Telefone do Paciente
+    const telefonePacienteBruto =
+      record.whatsapp_cliente ||
+      record.cliente_telefone ||
+      record.telefone ||
+      record.whatsapp ||
+      dbAgendamento?.whatsapp_cliente ||
+      dbAgendamento?.cliente_telefone ||
+      dbAgendamento?.telefone ||
+      dbAgendamento?.clientes?.telefone ||
+      null;
+
+    const telefonePaciente = sanitizarTelefone(telefonePacienteBruto);
+
+    // Resolução do Nome e Detalhes do Serviço
+    let nomeServico =
+      record.servico_nome ||
+      record.servico ||
+      dbAgendamento?.servico_nome ||
+      dbAgendamento?.servicos?.nome ||
+      "Consulta";
+
+    let precoServico = dbAgendamento?.servicos?.preco ? String(dbAgendamento.servicos.preco) : "";
+    let duracaoServico = dbAgendamento?.servicos?.duracao ? `${dbAgendamento.servicos.duracao} min` : "";
+
+    if ((!nomeServico || nomeServico === "Consulta") && targetServicoId) {
+      const { data: servicoDirect } = await supabase
+        .from("servicos")
+        .select("id, nome, preco, duracao")
+        .eq("id", targetServicoId)
+        .maybeSingle();
+
+      if (servicoDirect) {
+        nomeServico = servicoDirect.nome || nomeServico;
+        precoServico = servicoDirect.preco ? String(servicoDirect.preco) : precoServico;
+        duracaoServico = servicoDirect.duracao ? `${servicoDirect.duracao} min` : duracaoServico;
+      }
+    }
+
+    // Resolução dos Dados da Empresa / Clínica
+    let nomeClinica = dbAgendamento?.empresas?.nome_negocio || "Praxis";
+    let telefoneClinicaBruto = dbAgendamento?.empresas?.telefone || null;
+
+    if (!telefoneClinicaBruto && targetEmpresaId) {
+      const { data: empresaDirect } = await supabase
         .from("empresas")
         .select("id, nome_negocio, telefone")
         .eq("id", targetEmpresaId)
         .maybeSingle();
 
-      if (erroEmpresa) {
-        console.error("[Erro Supabase Empresas]:", erroEmpresa);
+      if (empresaDirect) {
+        nomeClinica = empresaDirect.nome_negocio || nomeClinica;
+        telefoneClinicaBruto = empresaDirect.telefone || null;
       }
+    }
 
-      if (empresa) {
-        nomeClinica = empresa.nome_negocio || "Praxis";
-        telefoneClinica = empresa.telefone || null;
-        console.log(`[Empresa Encontrada]: ${nomeClinica} | Tel Bruto: ${telefoneClinica}`);
-      } else {
-        console.warn(`[Aviso]: Nenhuma empresa encontrada com o ID ${targetEmpresaId}`);
-      }
-    } else {
-      // Fallback: se o agendamento não salvou empresa_id, busca a primeira empresa cadastrada
-      console.warn("[Aviso]: record.empresa_id está vazio no agendamento! Buscando fallback...");
+    // Fallback de Empresa se necessário
+    if (!telefoneClinicaBruto) {
       const { data: fallbackEmpresa } = await supabase
         .from("empresas")
         .select("id, nome_negocio, telefone")
@@ -223,67 +290,55 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (fallbackEmpresa) {
-        nomeClinica = fallbackEmpresa.nome_negocio || "Praxis";
-        telefoneClinica = fallbackEmpresa.telefone || null;
-        console.log(`[Empresa Fallback Encontrada]: ${nomeClinica} | Tel Bruto: ${telefoneClinica}`);
+        nomeClinica = fallbackEmpresa.nome_negocio || nomeClinica;
+        telefoneClinicaBruto = fallbackEmpresa.telefone || null;
       }
     }
 
-    // 2. Busca Dados do Serviço
-    if (record.servico_id) {
-      const { data: servico } = await supabase
-        .from("servicos")
-        .select("id, nome, preco, duracao")
-        .eq("id", record.servico_id)
-        .maybeSingle();
+    const telefoneClinicaSanitizado = sanitizarTelefone(telefoneClinicaBruto);
 
-      if (servico) {
-        nomeServico = servico.nome || nomeServico;
-        precoServico = servico.preco || "";
-        duracaoServico = servico.duracao ? `${servico.duracao} min` : "";
+    // Formatação de Data e Horário
+    const dataRaw =
+      record.data ||
+      record.data_agendamento ||
+      record.data_hora_agendamento ||
+      dbAgendamento?.data ||
+      dbAgendamento?.data_agendamento ||
+      dbAgendamento?.data_hora_agendamento;
+
+    const dataFormatada = formatarData(dataRaw);
+
+    let horaFormatada =
+      record.horario ||
+      record.hora ||
+      dbAgendamento?.horario ||
+      dbAgendamento?.hora ||
+      "08:00";
+
+    if (!horaFormatada || horaFormatada === "08:00") {
+      const dataHoraIso = record.data_hora_agendamento || dbAgendamento?.data_hora_agendamento;
+      if (dataHoraIso) {
+        const parteHora = String(dataHoraIso).split("T")[1];
+        if (parteHora) horaFormatada = parteHora.slice(0, 5);
       }
     }
 
-    // 3. Sanitização dos Telefones
-    const nomePaciente =
-      record.cliente_nome ||
-      record.nome_cliente ||
-      record.nome ||
-      "Paciente";
+    const observacoes =
+      record.observacoes ||
+      record.notas ||
+      dbAgendamento?.observacoes ||
+      dbAgendamento?.notas ||
+      "";
 
-    const telefonePacienteBruto =
-      record.whatsapp_cliente ||
-      record.cliente_telefone ||
-      record.telefone ||
-      record.whatsapp ||
-      null;
+    console.log(`[Dados Hidratados] Paciente: ${nomePaciente} (${telefonePaciente}) | Clínica: ${nomeClinica} (${telefoneClinicaSanitizado}) | Serviço: ${nomeServico} | Data: ${dataFormatada} ${horaFormatada}`);
 
-    const telefonePaciente = sanitizarTelefone(telefonePacienteBruto);
-    const telefoneClinicaSanitizado = sanitizarTelefone(telefoneClinica);
-
-    console.log(`[Telefones Processados] Paciente: ${telefonePaciente} | Clínica: ${telefoneClinicaSanitizado}`);
-
-    const dataFormatada = formatarData(
-      record.data || record.data_agendamento || record.data_hora_agendamento
-    );
-
-    let horaFormatada = record.horario || record.hora || "08:00";
-    if (!horaFormatada && record.data_hora_agendamento) {
-      const parteHora = String(record.data_hora_agendamento).split("T")[1];
-      if (parteHora) horaFormatada = parteHora.slice(0, 5);
-    }
-
-    const observacoes = record.observacoes || record.notas || "";
     const resultadosEnvios: any[] = [];
 
-    // ==========================================
-    // DISPARO DE MENSAGENS CONFORME O CENÁRIO
-    // ==========================================
-
+    // ── 3. Disparo de Notificações conforme o Tipo ──────────────────────────────
     if (isNovoAgendamento) {
-      // ------------------------------------------
+      // ══════════════════════════════════════════
       // CENÁRIO 1: NOVO AGENDAMENTO (INSERT)
-      // ------------------------------------------
+      // ══════════════════════════════════════════
 
       // Mensagem Paciente
       if (telefonePaciente) {
@@ -306,6 +361,9 @@ Deno.serve(async (req: Request) => {
           .filter((l) => l !== null)
           .join("\n");
 
+        console.log(`[Disparo WhatsApp] Destinatário: Paciente (${telefonePaciente}) | Tipo: Novo Agendamento`);
+        console.log(`[Texto Mensagem Paciente]:\n${textoPaciente}`);
+
         const resPaciente = await enviarMensagemWhatsApp({
           apiUrl: EVOLUTION_API_URL,
           apiKey: EVOLUTION_API_KEY,
@@ -322,7 +380,7 @@ Deno.serve(async (req: Request) => {
           detalhes: resPaciente,
         });
       } else {
-        console.log("[Aviso] Paciente não possui telefone sanitizável válido.");
+        console.warn("[Aviso] Paciente não possui telefone sanitizável válido para novo agendamento.");
       }
 
       // Mensagem Profissional / Clínica
@@ -342,7 +400,8 @@ Deno.serve(async (req: Request) => {
           .filter((l) => l !== null)
           .join("\n");
 
-        console.log(`[Disparando Alerta Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+        console.log(`[Disparo WhatsApp] Destinatário: Clínica/Profissional (${telefoneClinicaSanitizado}) | Tipo: Novo Agendamento`);
+        console.log(`[Texto Mensagem Clínica]:\n${textoClinica}`);
 
         const resClinica = await enviarMensagemWhatsApp({
           apiUrl: EVOLUTION_API_URL,
@@ -361,13 +420,13 @@ Deno.serve(async (req: Request) => {
         });
       } else {
         console.warn(
-          `[Alerta Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
+          `[Alerta Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto: "${telefoneClinicaBruto}"`
         );
       }
     } else if (isCancelamento) {
-      // ------------------------------------------
-      // CENÁRIO 2: CANCELAMENTO (UPDATE -> 'cancelado')
-      // ------------------------------------------
+      // ══════════════════════════════════════════
+      // CENÁRIO 2: CANCELAMENTO (UPDATE / INSERT 'cancelado')
+      // ══════════════════════════════════════════
 
       // Mensagem Paciente
       if (telefonePaciente) {
@@ -378,6 +437,9 @@ Deno.serve(async (req: Request) => {
           ``,
           `Se desejar reagendar em outro momento, acesse nossa página novamente.`,
         ].join("\n");
+
+        console.log(`[Disparo WhatsApp] Destinatário: Paciente (${telefonePaciente}) | Tipo: Cancelamento`);
+        console.log(`[Texto Mensagem Cancelamento Paciente]:\n${textoPacienteCancelamento}`);
 
         const resPaciente = await enviarMensagemWhatsApp({
           apiUrl: EVOLUTION_API_URL,
@@ -395,7 +457,7 @@ Deno.serve(async (req: Request) => {
           detalhes: resPaciente,
         });
       } else {
-        console.log("[Aviso] Paciente não possui telefone sanitizável válido para notificação de cancelamento.");
+        console.warn("[Aviso] Paciente não possui telefone sanitizável válido para notificação de cancelamento.");
       }
 
       // Mensagem Profissional / Clínica
@@ -408,7 +470,8 @@ Deno.serve(async (req: Request) => {
           `O horário foi liberado na sua agenda do Praxis.`,
         ].join("\n");
 
-        console.log(`[Disparando Alerta Cancelamento Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+        console.log(`[Disparo WhatsApp] Destinatário: Clínica/Profissional (${telefoneClinicaSanitizado}) | Tipo: Cancelamento`);
+        console.log(`[Texto Mensagem Cancelamento Clínica]:\n${textoClinicaCancelamento}`);
 
         const resClinica = await enviarMensagemWhatsApp({
           apiUrl: EVOLUTION_API_URL,
@@ -427,7 +490,7 @@ Deno.serve(async (req: Request) => {
         });
       } else {
         console.warn(
-          `[Alerta Cancelamento Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
+          `[Alerta Cancelamento Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto: "${telefoneClinicaBruto}"`
         );
       }
     }
