@@ -908,7 +908,6 @@ function FluxoAgendamentoConteudo() {
       }
     }
 
-    let clienteIdParaInsert = clienteBanco?.id || currentUser.id;
     if (clienteBanco) {
       if (clienteBanco.nome) clienteNome = clienteBanco.nome;
       if (clienteBanco.telefone) clienteTel = clienteBanco.telefone;
@@ -951,12 +950,11 @@ function FluxoAgendamentoConteudo() {
         return;
       }
 
-      // 🛡️ 2. Inserção Segura do Agendamento usando obrigatoriamente cliente_id autenticado e user_id
+      // 🛡️ 2. Inserção Segura do Agendamento usando cliente_id e user_id
       const dataHoraIso = `${dataStr}T${horarioSelecionado}:00Z`;
 
-      const { error: insertError } = await supabase.from("agendamentos").insert({
+      const agendamentoPayload: Record<string, any> = {
         empresa_id: profissional.id,
-        cliente_id: clienteIdParaInsert,
         user_id: currentUser.id,
         nome_cliente: clienteNome,
         whatsapp_cliente: clienteTel,
@@ -967,7 +965,21 @@ function FluxoAgendamentoConteudo() {
         horario: horarioSelecionado,
         data_hora_agendamento: dataHoraIso,
         status: "Pendente",
-      });
+      };
+
+      if (clienteBanco?.id) {
+        agendamentoPayload.cliente_id = clienteBanco.id;
+      }
+
+      let { error: insertError } = await supabase.from("agendamentos").insert(agendamentoPayload);
+
+      // Fallback de retrocompatibilidade: se a coluna user_id ainda não existir no schema do banco
+      if (insertError && /user_id/i.test(insertError.message || insertError.details || "")) {
+        console.warn("[LandingPage] Coluna user_id não encontrada, realizando retry sem user_id...", insertError);
+        const { user_id: _uid, ...payloadSemUserId } = agendamentoPayload;
+        const retry = await supabase.from("agendamentos").insert(payloadSemUserId);
+        insertError = retry.error;
+      }
 
       if (insertError) {
         console.error("[LandingPage] Erro ao gravar agendamento:", insertError);
