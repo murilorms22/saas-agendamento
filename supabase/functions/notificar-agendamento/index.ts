@@ -138,20 +138,9 @@ Deno.serve(async (req: Request) => {
     const payload: WebhookPayload = await req.json().catch(() => ({}));
     console.log("[Webhook Recebido]", JSON.stringify(payload));
 
-    if (payload.type && payload.type !== "INSERT") {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: `Evento ignorado: tipo "${payload.type}" (esperado: INSERT).`,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
+    const type = payload.type || (payload.record ? "INSERT" : "");
     const record: WebhookRecord = payload.record || payload;
+    const oldRecord: WebhookRecord | null = payload.old_record || null;
 
     if (!record || !record.id) {
       return new Response(
@@ -166,7 +155,35 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[Processando Agendamento #${record.id}] empresa_id recebido:`, record.empresa_id);
+    const statusAtual = (record.status || "").trim().toLowerCase();
+    const statusAntigo = (oldRecord?.status || "").trim().toLowerCase();
+
+    const isNovoAgendamento = type === "INSERT";
+    const isCancelamento =
+      type === "UPDATE" &&
+      (statusAtual === "cancelado" || statusAtual === "cancelada") &&
+      statusAntigo !== "cancelado" &&
+      statusAntigo !== "cancelada";
+
+    if (!isNovoAgendamento && !isCancelamento) {
+      console.log(
+        `[Evento Ignorado] Tipo: "${type}", Status Atual: "${record.status}", Status Anterior: "${oldRecord?.status}"`
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Evento ignorado",
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log(
+      `[Processando Agendamento #${record.id}] Tipo: ${type} (isNovo: ${isNovoAgendamento}, isCancelamento: ${isCancelamento}) | Empresa ID: ${record.empresa_id}`
+    );
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -229,8 +246,8 @@ Deno.serve(async (req: Request) => {
 
     // 3. Sanitização dos Telefones
     const nomePaciente =
-      record.nome_cliente ||
       record.cliente_nome ||
+      record.nome_cliente ||
       record.nome ||
       "Paciente";
 
@@ -246,100 +263,179 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[Telefones Processados] Paciente: ${telefonePaciente} | Clínica: ${telefoneClinicaSanitizado}`);
 
-    let dataFormatada = formatarData(
+    const dataFormatada = formatarData(
       record.data || record.data_agendamento || record.data_hora_agendamento
     );
 
-    let horarioFormatado = record.horario || record.hora || "08:00";
-    if (!horarioFormatado && record.data_hora_agendamento) {
+    let horaFormatada = record.horario || record.hora || "08:00";
+    if (!horaFormatada && record.data_hora_agendamento) {
       const parteHora = String(record.data_hora_agendamento).split("T")[1];
-      if (parteHora) horarioFormatado = parteHora.slice(0, 5);
+      if (parteHora) horaFormatada = parteHora.slice(0, 5);
     }
 
     const observacoes = record.observacoes || record.notas || "";
     const resultadosEnvios: any[] = [];
 
-    // Envio 1: Paciente
-    if (telefonePaciente) {
-      const textoPaciente = [
-        `Olá, *${nomePaciente}*! 👋`,
-        ``,
-        `Seu agendamento foi registrado com sucesso! 🎉`,
-        ``,
-        `🏥 *Clínica:* ${nomeClinica}`,
-        `🩺 *Serviço:* ${nomeServico}`,
-        `📅 *Data:* ${dataFormatada}`,
-        `⏰ *Horário:* ${horarioFormatado}`,
-        precoServico ? `💰 *Valor:* R$ ${precoServico}` : null,
-        duracaoServico ? `⏱️ *Duração estimada:* ${duracaoServico}` : null,
-        ``,
-        `Caso precise reagendar ou tirar dúvidas, basta responder a esta mensagem.`,
-        ``,
-        `Agradecemos a confiança! ✨`,
-      ]
-        .filter((l) => l !== null)
-        .join("\n");
+    // ==========================================
+    // DISPARO DE MENSAGENS CONFORME O CENÁRIO
+    // ==========================================
 
-      const resPaciente = await enviarMensagemWhatsApp({
-        apiUrl: EVOLUTION_API_URL,
-        apiKey: EVOLUTION_API_KEY,
-        instance: EVOLUTION_INSTANCE,
-        numero: telefonePaciente,
-        texto: textoPaciente,
-      });
+    if (isNovoAgendamento) {
+      // ------------------------------------------
+      // CENÁRIO 1: NOVO AGENDAMENTO (INSERT)
+      // ------------------------------------------
 
-      resultadosEnvios.push({
-        destinatario: "paciente",
-        numero: telefonePaciente,
-        status: resPaciente.sucesso ? "enviado" : "erro",
-        detalhes: resPaciente,
-      });
-    } else {
-      console.log("[Aviso] Paciente não possui telefone sanitizável válido.");
-    }
+      // Mensagem Paciente
+      if (telefonePaciente) {
+        const textoPaciente = [
+          `Olá, *${nomePaciente}*! 👋`,
+          ``,
+          `Seu agendamento foi registrado com sucesso! 🎉`,
+          ``,
+          `🏥 *Clínica:* ${nomeClinica}`,
+          `🩺 *Serviço:* ${nomeServico}`,
+          `📅 *Data:* ${dataFormatada}`,
+          `⏰ *Horário:* ${horaFormatada}`,
+          precoServico ? `💰 *Valor:* R$ ${precoServico}` : null,
+          duracaoServico ? `⏱️ *Duração estimada:* ${duracaoServico}` : null,
+          ``,
+          `Caso precise reagendar ou tirar dúvidas, basta responder a esta mensagem.`,
+          ``,
+          `Agradecemos a confiança! ✨`,
+        ]
+          .filter((l) => l !== null)
+          .join("\n");
 
-    // Envio 2: Profissional / Clínica
-    if (telefoneClinicaSanitizado) {
-      const textoClinica = [
-        `🔔 *Novo Agendamento Confirmado!*`,
-        ``,
-        `👤 *Paciente:* ${nomePaciente}`,
-        telefonePacienteBruto ? `📱 *Contato:* ${telefonePacienteBruto}` : null,
-        `🩺 *Serviço:* ${nomeServico}`,
-        `📅 *Data:* ${dataFormatada}`,
-        `⏰ *Horário:* ${horarioFormatado}`,
-        observacoes ? `📝 *Observações:* ${observacoes}` : null,
-        ``,
-        `Acesse seu painel *Praxis* para visualizar os detalhes completos da sua agenda.`,
-      ]
-        .filter((l) => l !== null)
-        .join("\n");
+        const resPaciente = await enviarMensagemWhatsApp({
+          apiUrl: EVOLUTION_API_URL,
+          apiKey: EVOLUTION_API_KEY,
+          instance: EVOLUTION_INSTANCE,
+          numero: telefonePaciente,
+          texto: textoPaciente,
+        });
 
-      console.log(`[Disparando Alerta Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+        resultadosEnvios.push({
+          destinatario: "paciente",
+          tipo: "novo_agendamento",
+          numero: telefonePaciente,
+          status: resPaciente.sucesso ? "enviado" : "erro",
+          detalhes: resPaciente,
+        });
+      } else {
+        console.log("[Aviso] Paciente não possui telefone sanitizável válido.");
+      }
 
-      const resClinica = await enviarMensagemWhatsApp({
-        apiUrl: EVOLUTION_API_URL,
-        apiKey: EVOLUTION_API_KEY,
-        instance: EVOLUTION_INSTANCE,
-        numero: telefoneClinicaSanitizado,
-        texto: textoClinica,
-      });
+      // Mensagem Profissional / Clínica
+      if (telefoneClinicaSanitizado) {
+        const textoClinica = [
+          `🔔 *Novo Agendamento Confirmado!*`,
+          ``,
+          `👤 *Paciente:* ${nomePaciente}`,
+          telefonePacienteBruto ? `📱 *Contato:* ${telefonePacienteBruto}` : null,
+          `🩺 *Serviço:* ${nomeServico}`,
+          `📅 *Data:* ${dataFormatada}`,
+          `⏰ *Horário:* ${horaFormatada}`,
+          observacoes ? `📝 *Observações:* ${observacoes}` : null,
+          ``,
+          `Acesse seu painel *Praxis* para visualizar os detalhes completos da sua agenda.`,
+        ]
+          .filter((l) => l !== null)
+          .join("\n");
 
-      resultadosEnvios.push({
-        destinatario: "clinica",
-        numero: telefoneClinicaSanitizado,
-        status: resClinica.sucesso ? "enviado" : "erro",
-        detalhes: resClinica,
-      });
-    } else {
-      console.warn(
-        `[Alerta Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
-      );
+        console.log(`[Disparando Alerta Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+
+        const resClinica = await enviarMensagemWhatsApp({
+          apiUrl: EVOLUTION_API_URL,
+          apiKey: EVOLUTION_API_KEY,
+          instance: EVOLUTION_INSTANCE,
+          numero: telefoneClinicaSanitizado,
+          texto: textoClinica,
+        });
+
+        resultadosEnvios.push({
+          destinatario: "clinica",
+          tipo: "novo_agendamento",
+          numero: telefoneClinicaSanitizado,
+          status: resClinica.sucesso ? "enviado" : "erro",
+          detalhes: resClinica,
+        });
+      } else {
+        console.warn(
+          `[Alerta Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
+        );
+      }
+    } else if (isCancelamento) {
+      // ------------------------------------------
+      // CENÁRIO 2: CANCELAMENTO (UPDATE -> 'cancelado')
+      // ------------------------------------------
+
+      // Mensagem Paciente
+      if (telefonePaciente) {
+        const textoPacienteCancelamento = [
+          `❌ *Agendamento Cancelado*`,
+          ``,
+          `Olá, *${nomePaciente}*. Confirmamos o cancelamento da sua consulta de *${nomeServico}* marcada para o dia *${dataFormatada}* às *${horaFormatada}*.`,
+          ``,
+          `Se desejar reagendar em outro momento, acesse nossa página novamente.`,
+        ].join("\n");
+
+        const resPaciente = await enviarMensagemWhatsApp({
+          apiUrl: EVOLUTION_API_URL,
+          apiKey: EVOLUTION_API_KEY,
+          instance: EVOLUTION_INSTANCE,
+          numero: telefonePaciente,
+          texto: textoPacienteCancelamento,
+        });
+
+        resultadosEnvios.push({
+          destinatario: "paciente",
+          tipo: "cancelamento",
+          numero: telefonePaciente,
+          status: resPaciente.sucesso ? "enviado" : "erro",
+          detalhes: resPaciente,
+        });
+      } else {
+        console.log("[Aviso] Paciente não possui telefone sanitizável válido para notificação de cancelamento.");
+      }
+
+      // Mensagem Profissional / Clínica
+      if (telefoneClinicaSanitizado) {
+        const textoClinicaCancelamento = [
+          `⚠️ *Agendamento Cancelado*`,
+          ``,
+          `O paciente *${nomePaciente}* cancelou a consulta de *${nomeServico}* que estava agendada para o dia *${dataFormatada}* às *${horaFormatada}*.`,
+          ``,
+          `O horário foi liberado na sua agenda do Praxis.`,
+        ].join("\n");
+
+        console.log(`[Disparando Alerta Cancelamento Profissional] Enviando para: ${telefoneClinicaSanitizado}`);
+
+        const resClinica = await enviarMensagemWhatsApp({
+          apiUrl: EVOLUTION_API_URL,
+          apiKey: EVOLUTION_API_KEY,
+          instance: EVOLUTION_INSTANCE,
+          numero: telefoneClinicaSanitizado,
+          texto: textoClinicaCancelamento,
+        });
+
+        resultadosEnvios.push({
+          destinatario: "clinica",
+          tipo: "cancelamento",
+          numero: telefoneClinicaSanitizado,
+          status: resClinica.sucesso ? "enviado" : "erro",
+          detalhes: resClinica,
+        });
+      } else {
+        console.warn(
+          `[Alerta Cancelamento Profissional Ignorado] Telefone da clínica não pôde ser sanitizado. Valor bruto no banco: "${telefoneClinica}"`
+        );
+      }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
+        evento: isNovoAgendamento ? "novo_agendamento" : "cancelamento",
         agendamento_id: record.id,
         paciente: nomePaciente,
         clinica: nomeClinica,
