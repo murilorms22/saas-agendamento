@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format, parseISO, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -14,6 +14,8 @@ import {
   CalendarDays,
   ExternalLink,
   MessageCircle,
+  ChevronDown,
+  History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
@@ -43,6 +45,16 @@ interface ModalMeusAgendamentosProps {
   onToast: (mensagem: string, tipo?: "warning" | "error" | "info" | "success") => void;
 }
 
+const parseDataHora = (dataStr: string, horarioStr?: string): Date => {
+  try {
+    const [ano, mes, dia] = dataStr.split("-").map(Number);
+    const [hora = 8, minuto = 0] = (horarioStr || "08:00").split(":").map(Number);
+    return new Date(ano, mes - 1, dia, hora, minuto);
+  } catch {
+    return new Date(0);
+  }
+};
+
 export function ModalMeusAgendamentos({
   aberto,
   onFechar,
@@ -57,6 +69,7 @@ export function ModalMeusAgendamentos({
   const [carregando, setCarregando] = useState(false);
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState<AgendamentoPacienteItem | null>(null);
   const [cancelando, setCancelando] = useState(false);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   // Carrega agendamentos do cliente autenticado nesta clínica
   const carregarAgendamentos = async () => {
@@ -99,6 +112,35 @@ export function ModalMeusAgendamentos({
     }
   }, [aberto, empresaId, clienteId, userId]);
 
+  // Separação dos Agendamentos: Ativos vs Histórico
+  const { agendamentosAtivos, agendamentosHistorico } = useMemo(() => {
+    const agora = new Date();
+    const ativos: AgendamentoPacienteItem[] = [];
+    const historico: AgendamentoPacienteItem[] = [];
+
+    agendamentos.forEach((ag) => {
+      const statusLimpo = (ag.status || "").trim().toLowerCase();
+      const dataHora = parseDataHora(ag.data, ag.horario);
+      const isCancelado = statusLimpo === "cancelado" || statusLimpo === "cancelada";
+      const isPassado = dataHora.getTime() < agora.getTime();
+      const isFinalizado = statusLimpo === "finalizado";
+
+      if (!isCancelado && !isPassado && !isFinalizado) {
+        ativos.push(ag);
+      } else {
+        historico.push(ag);
+      }
+    });
+
+    // Ordena ativos: mais próximos primeiro (ordem cronológica crescente)
+    ativos.sort((a, b) => parseDataHora(a.data, a.horario).getTime() - parseDataHora(b.data, b.horario).getTime());
+
+    // Ordena histórico: mais recentes primeiro (ordem cronológica decrescente)
+    historico.sort((a, b) => parseDataHora(b.data, b.horario).getTime() - parseDataHora(a.data, a.horario).getTime());
+
+    return { agendamentosAtivos: ativos, agendamentosHistorico: historico };
+  }, [agendamentos]);
+
   if (!aberto) return null;
 
   // Handler de Cancelamento
@@ -134,6 +176,40 @@ export function ModalMeusAgendamentos({
 
   // Telefone da clínica limpo para WhatsApp
   const telLimpo = (telefoneClinica || "").replace(/\D/g, "");
+
+  const getStatusBadge = (status: string, isHistorico = false) => {
+    const statusNormalizado = (status || "Pendente").trim();
+
+    if (statusNormalizado.toLowerCase() === "cancelado" || statusNormalizado.toLowerCase() === "cancelada") {
+      return {
+        bg: "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-400",
+        label: "Cancelado",
+        icone: <XCircle size={13} />,
+      };
+    }
+
+    if (statusNormalizado.toLowerCase() === "finalizado" || isHistorico) {
+      return {
+        bg: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:bg-slate-500/15 dark:text-slate-400",
+        label: "Concluído",
+        icone: <CheckCircle2 size={13} />,
+      };
+    }
+
+    if (statusNormalizado.toLowerCase() === "confirmado") {
+      return {
+        bg: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-400",
+        label: "Confirmado",
+        icone: <CheckCircle2 size={13} />,
+      };
+    }
+
+    return {
+      bg: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-400",
+      label: "Pendente de Confirmação",
+      icone: <Clock size={13} />,
+    };
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -180,8 +256,8 @@ export function ModalMeusAgendamentos({
           </motion.button>
         </div>
 
-        {/* Lista de Agendamentos (Scrollable) */}
-        <div className="flex-1 overflow-y-auto py-5 space-y-4 pr-1">
+        {/* Conteúdo Principal (Scrollable) */}
+        <div className="flex-1 overflow-y-auto py-5 space-y-6 pr-1">
           {carregando ? (
             <div className="py-16 flex flex-col items-center justify-center text-muted-foreground gap-3">
               <Loader2 size={28} className="animate-spin text-primary" />
@@ -197,160 +273,237 @@ export function ModalMeusAgendamentos({
                   Nenhum agendamento encontrado
                 </h3>
                 <p className="font-body text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-                  Você ainda não possui consultas agendadas nesta clínica ou todas as anteriores já foram concluídas.
+                  Você ainda não possui consultas agendadas nesta clínica.
                 </p>
               </div>
             </div>
           ) : (
-            agendamentos.map((ag) => {
-              // Cálculo da regra de cancelamento: >= 24h
-              let dataHoraCompleta: Date | null = null;
-              try {
-                const [ano, mes, dia] = ag.data.split("-").map(Number);
-                const [hora, minuto = 0] = (ag.horario || "08:00").split(":").map(Number);
-                dataHoraCompleta = new Date(ano, mes - 1, dia, hora, minuto);
-              } catch {
-                dataHoraCompleta = null;
-              }
+            <>
+              {/* ── SEÇÃO 1: AGENDAMENTOS ATIVOS (PRÓXIMAS CONSULTAS) ── */}
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Próximas Consultas ({agendamentosAtivos.length})
+                  </h3>
+                </div>
 
-              const horasRestantes = dataHoraCompleta
-                ? differenceInHours(dataHoraCompleta, new Date())
-                : 0;
-
-              const podeCancelar =
-                ag.status !== "Cancelado" &&
-                ag.status !== "Finalizado" &&
-                horasRestantes >= 24;
-
-              const dataFormatada = (() => {
-                try {
-                  return format(parseISO(ag.data), "EEEE, dd 'de' MMMM 'de' yyyy", {
-                    locale: ptBR,
-                  });
-                } catch {
-                  return ag.data;
-                }
-              })();
-
-              const statusConfigs = {
-                Confirmado: {
-                  bg: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
-                  label: "Confirmado",
-                  icone: <CheckCircle2 size={13} />,
-                },
-                Pendente: {
-                  bg: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-                  label: "Pendente de Confirmação",
-                  icone: <Clock size={13} />,
-                },
-                Finalizado: {
-                  bg: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-                  label: "Concluído",
-                  icone: <CheckCircle2 size={13} />,
-                },
-                Cancelado: {
-                  bg: "bg-rose-500/10 text-rose-600 border-rose-500/30",
-                  label: "Cancelado",
-                  icone: <XCircle size={13} />,
-                },
-              };
-
-              const statusInfo = statusConfigs[ag.status] || statusConfigs.Pendente;
-
-              const linkWhatsAppClinica = telLimpo
-                ? `https://wa.me/55${telLimpo}?text=${encodeURIComponent(
-                    `Olá! Gostaria de falar sobre o agendamento de ${ag.servico_nome || ag.servico || "consulta"} do dia ${ag.data} às ${ag.horario}.`
-                  )}`
-                : null;
-
-              return (
-                <div
-                  key={ag.id}
-                  className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3.5 ${
-                    ag.status === "Cancelado"
-                      ? "bg-secondary/20 border-border/40 opacity-70"
-                      : "bg-background border-border/70 shadow-soft"
-                  }`}
-                >
-                  {/* Topo do Card: Serviço e Status */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h3 className="font-display font-bold text-base text-foreground flex items-center gap-2">
-                        <Tag size={15} className="text-primary" />
-                        {ag.servico_nome || ag.servico || "Consulta Especializada"}
-                      </h3>
-                      {ag.valor && (
-                        <p className="font-body text-xs text-muted-foreground font-semibold mt-0.5">
-                          {typeof ag.valor === "number" ? `R$ ${ag.valor.toFixed(2).replace(".", ",")}` : ag.valor}
-                        </p>
-                      )}
-                    </div>
-
-                    <div
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-body font-bold border self-start sm:self-center ${statusInfo.bg}`}
-                    >
-                      {statusInfo.icone}
-                      <span>{statusInfo.label}</span>
-                    </div>
+                {agendamentosAtivos.length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-secondary/20 border border-border/50 text-center space-y-2">
+                    <p className="font-body text-xs font-semibold text-foreground">
+                      Você não possui consultas agendadas no momento.
+                    </p>
+                    <p className="font-body text-[11px] text-muted-foreground">
+                      Quando você agendar uma nova consulta, ela aparecerá em destaque aqui.
+                    </p>
                   </div>
+                ) : (
+                  agendamentosAtivos.map((ag) => {
+                    const dataHoraCompleta = parseDataHora(ag.data, ag.horario);
+                    const horasRestantes = differenceInHours(dataHoraCompleta, new Date());
+                    const podeCancelar = horasRestantes >= 24;
 
-                  {/* Informações de Data e Hora */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-body">
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-secondary/30 text-foreground capitalize">
-                      <Calendar size={14} className="text-primary shrink-0" />
-                      <span>{dataFormatada}</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-secondary/30 text-foreground font-semibold">
-                      <Clock size={14} className="text-primary shrink-0" />
-                      <span>Horário: {ag.horario}</span>
-                    </div>
-                  </div>
+                    const dataFormatada = (() => {
+                      try {
+                        return format(parseISO(ag.data), "EEEE, dd 'de' MMMM 'de' yyyy", {
+                          locale: ptBR,
+                        });
+                      } catch {
+                        return ag.data;
+                      }
+                    })();
 
-                  {/* Área de Ações e Regra de Cancelamento de 24h */}
-                  {ag.status !== "Cancelado" && ag.status !== "Finalizado" && (
-                    <div className="pt-2 border-t border-border/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      {podeCancelar ? (
-                        <>
-                          <span className="text-[11px] font-body text-muted-foreground">
-                            Cancelamento online disponível até 24h antes do horário.
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setAgendamentoParaCancelar(ag)}
-                            className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
-                          >
-                            <XCircle size={14} />
-                            <span>Cancelar Agendamento</span>
-                          </button>
-                        </>
-                      ) : (
-                        <div className="w-full bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-body">
-                          <div className="flex items-start gap-2">
-                            <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
-                            <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
-                              Cancelamentos online são permitidos com até <strong>24h de antecedência</strong>. Para imprevistos de última hora, entre em contato diretamente com a clínica.
-                            </p>
+                    const statusInfo = getStatusBadge(ag.status);
+
+                    const linkWhatsAppClinica = telLimpo
+                      ? `https://wa.me/55${telLimpo}?text=${encodeURIComponent(
+                          `Olá! Gostaria de falar sobre o agendamento de ${ag.servico_nome || ag.servico || "consulta"} do dia ${ag.data} às ${ag.horario}.`
+                        )}`
+                      : null;
+
+                    return (
+                      <div
+                        key={ag.id}
+                        className="p-4 sm:p-5 rounded-2xl bg-background border border-border/70 shadow-soft transition-all space-y-3.5"
+                      >
+                        {/* Topo do Card: Serviço e Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <h4 className="font-display font-bold text-base text-foreground flex items-center gap-2">
+                              <Tag size={15} className="text-primary" />
+                              {ag.servico_nome || ag.servico || "Consulta Especializada"}
+                            </h4>
+                            {ag.valor && (
+                              <p className="font-body text-xs text-muted-foreground font-semibold mt-0.5">
+                                {typeof ag.valor === "number"
+                                  ? `R$ ${ag.valor.toFixed(2).replace(".", ",")}`
+                                  : ag.valor}
+                              </p>
+                            )}
                           </div>
 
-                          {linkWhatsAppClinica && (
-                            <a
-                              href={linkWhatsAppClinica}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-body font-bold text-xs transition-colors shrink-0 shadow-sm cursor-pointer"
-                            >
-                              <MessageCircle size={13} />
-                              <span>Falar no WhatsApp</span>
-                              <ExternalLink size={11} />
-                            </a>
+                          <div
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-body font-bold border self-start sm:self-center ${statusInfo.bg}`}
+                          >
+                            {statusInfo.icone}
+                            <span>{statusInfo.label}</span>
+                          </div>
+                        </div>
+
+                        {/* Informações de Data e Hora */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-body">
+                          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-secondary/30 text-foreground capitalize">
+                            <Calendar size={14} className="text-primary shrink-0" />
+                            <span>{dataFormatada}</span>
+                          </div>
+                          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-secondary/30 text-foreground font-semibold">
+                            <Clock size={14} className="text-primary shrink-0" />
+                            <span>Horário: {ag.horario}</span>
+                          </div>
+                        </div>
+
+                        {/* Área de Ações e Regra de Cancelamento de 24h */}
+                        <div className="pt-2 border-t border-border/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          {podeCancelar ? (
+                            <>
+                              <span className="text-[11px] font-body text-muted-foreground">
+                                Cancelamento online disponível até 24h antes do horário.
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setAgendamentoParaCancelar(ag)}
+                                className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-body font-bold text-xs transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
+                              >
+                                <XCircle size={14} />
+                                <span>Cancelar Agendamento</span>
+                              </button>
+                            </>
+                          ) : (
+                            <div className="w-full bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-body">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                                <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                                  Cancelamentos online são permitidos com até <strong>24h de antecedência</strong>. Para imprevistos de última hora, entre em contato diretamente com a clínica.
+                                </p>
+                              </div>
+
+                              {linkWhatsAppClinica && (
+                                <a
+                                  href={linkWhatsAppClinica}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-body font-bold text-xs transition-colors shrink-0 shadow-sm cursor-pointer"
+                                >
+                                  <MessageCircle size={13} />
+                                  <span>Falar no WhatsApp</span>
+                                  <ExternalLink size={11} />
+                                </a>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* ── SEÇÃO 2: HISTÓRICO / ANTERIORES E CANCELADOS (ACCORDION) ── */}
+              {agendamentosHistorico.length > 0 && (
+                <div className="pt-2 border-t border-border/40 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setHistoricoAberto((prev) => !prev)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-secondary/30 hover:bg-secondary/50 border border-border/40 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-secondary/80 text-muted-foreground flex items-center justify-center group-hover:text-foreground transition-colors">
+                        <History size={15} />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-display font-bold text-xs text-foreground block">
+                          Histórico de agendamentos
+                        </span>
+                        <span className="font-body text-[11px] text-muted-foreground">
+                          Consultas anteriores e canceladas
+                        </span>
+                      </div>
                     </div>
-                  )}
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-secondary text-[11px] font-body font-semibold text-muted-foreground">
+                        {agendamentosHistorico.length} {agendamentosHistorico.length === 1 ? "registro" : "registros"}
+                      </span>
+                      <motion.div
+                        animate={{ rotate: historicoAberto ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-muted-foreground group-hover:text-foreground"
+                      >
+                        <ChevronDown size={16} />
+                      </motion.div>
+                    </div>
+                  </button>
+
+                  <AnimatePresence>
+                    {historicoAberto && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="space-y-3 overflow-hidden"
+                      >
+                        {agendamentosHistorico.map((ag) => {
+                          const dataFormatada = (() => {
+                            try {
+                              return format(parseISO(ag.data), "EEEE, dd 'de' MMMM 'de' yyyy", {
+                                locale: ptBR,
+                              });
+                            } catch {
+                              return ag.data;
+                            }
+                          })();
+
+                          const statusInfo = getStatusBadge(ag.status, true);
+
+                          return (
+                            <div
+                              key={ag.id}
+                              className="p-3.5 sm:p-4 rounded-2xl bg-secondary/15 border border-border/40 opacity-75 dark:opacity-70 space-y-2.5 transition-all"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                <h4 className="font-display font-semibold text-sm text-foreground/90 flex items-center gap-2">
+                                  <Tag size={13} className="text-muted-foreground" />
+                                  {ag.servico_nome || ag.servico || "Consulta"}
+                                </h4>
+
+                                <div
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-body font-semibold border self-start sm:self-center ${statusInfo.bg}`}
+                                >
+                                  {statusInfo.icone}
+                                  <span>{statusInfo.label}</span>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-body text-muted-foreground">
+                                <div className="flex items-center gap-1.5 capitalize">
+                                  <Calendar size={13} className="shrink-0" />
+                                  <span>{dataFormatada}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Clock size={13} className="shrink-0" />
+                                  <span>Horário: {ag.horario}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              );
-            })
+              )}
+            </>
           )}
         </div>
 
