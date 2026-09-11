@@ -12,10 +12,12 @@ import {
   ChevronRight,
   ExternalLink,
   Palette,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfessional } from "../store/useProfessional";
 import { useAuth } from "../contexts/AuthContext";
+import { usePWAInstall } from "../hooks/usePWAInstall";
 import { ModalNovoAgendamento, type AgendamentoItem } from "../components/ModalNovoAgendamento";
 import { supabase } from "../lib/supabase";
 
@@ -32,6 +34,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { profissional, isLoading } = useProfessional();
   const { user, signOut } = useAuth();
+  const { isInstallable, installPWA } = usePWAInstall();
 
   // ── Estado da Sidebar: Retraída (apenas ícones) vs Expandida (Overlay com títulos) ──
   const [sidebarAberta, setSidebarAberta] = useState(false);
@@ -403,6 +406,39 @@ export default function AdminLayout() {
                 )}
               </AnimatePresence>
             </div>
+          )}
+
+          {/* Botão de Instalar Aplicativo (PWA) */}
+          {isInstallable && (
+            <button
+              type="button"
+              onClick={installPWA}
+              title="Instalar Aplicativo no Computador ou Celular"
+              className={`flex items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground font-body font-semibold text-xs transition-all cursor-pointer border border-primary/20 ${
+                sidebarAberta ? "w-full gap-2 px-4 py-2.5" : "w-11 h-11 sm:w-12 sm:h-12"
+              }`}
+            >
+              <Download size={16} className="shrink-0" />
+              <AnimatePresence>
+                {sidebarAberta && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{
+                      opacity: 1,
+                      x: 0,
+                      transition: { delay: 0.2, duration: 0.15, ease: "easeOut" },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      transition: { delay: 0, duration: 0 },
+                    }}
+                    className="truncate text-[11px]"
+                  >
+                    Instalar App no PC
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
           )}
 
           <button
