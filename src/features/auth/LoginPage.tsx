@@ -134,19 +134,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950/20 via-background to-emerald-900/10 relative flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden">
-      {/* Background Decorativo Glassmorphism com Efeitos em Verde */}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950/25 via-background to-indigo-900/15 relative flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden">
+      {/* Background Decorativo Glassmorphism com Efeitos em Azul Índigo */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-emerald-500/15 blur-3xl opacity-70" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-teal-500/15 blur-3xl opacity-70" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-600/10 blur-[110px] opacity-40" />
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl opacity-70" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-blue-600/15 blur-3xl opacity-70" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-600/10 blur-[110px] opacity-40" />
       </div>
 
       {/* Botão de Retorno ao Início */}
       <div className="w-full max-w-md mb-6">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-xs font-body font-semibold text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors px-3 py-1.5 rounded-xl hover:bg-emerald-500/10"
+          className="inline-flex items-center gap-2 text-xs font-body font-semibold text-muted-foreground hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-3 py-1.5 rounded-xl hover:bg-indigo-500/10"
         >
           <ArrowLeft size={14} />
           Voltar ao início
@@ -158,17 +158,17 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-md bg-card/90 backdrop-blur-md rounded-3xl p-8 sm:p-10 shadow-floating border border-emerald-500/20 relative z-10"
+        className="w-full max-w-md bg-card/90 backdrop-blur-md rounded-3xl p-8 sm:p-10 shadow-floating border border-indigo-500/20 relative z-10"
       >
-        {/* Topo: Ícone e Identidade Neutra Multi-tenant em Tons Verdes */}
+        {/* Topo: Ícone e Identidade Neutra Multi-tenant em Tons Azul Índigo */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 mb-4 shadow-soft border border-emerald-500/30">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 mb-4 shadow-soft border border-indigo-500/30">
             <Shield size={26} className="stroke-[2.2]" />
           </div>
 
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[11px] font-body font-bold uppercase tracking-wider mb-2.5">
-              <Sparkles size={12} className="text-emerald-600 dark:text-emerald-400" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 text-[11px] font-body font-bold uppercase tracking-wider mb-2.5">
+              <Sparkles size={12} className="text-indigo-600 dark:text-indigo-400" />
               Área do Profissional
             </div>
           </div>
@@ -214,7 +214,7 @@ export default function LoginPage() {
                 placeholder="seu.email@exemplo.com"
                 required
                 disabled={carregandoGeral}
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
               />
             </div>
           </div>
@@ -235,7 +235,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 disabled={carregandoGeral}
-                className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
+                className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background/80 font-body text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-muted-foreground/50"
               />
               <button
                 type="button"
@@ -249,13 +249,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Botão Submit Entrar (Tema Verde) */}
+          {/* Botão Submit Entrar (Tema Azul Índigo) */}
           <motion.button
             whileHover={carregandoGeral ? {} : { scale: 1.02, y: -1 }}
             whileTap={carregandoGeral ? {} : { scale: 0.98 }}
             type="submit"
             disabled={carregandoGeral}
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-body font-bold text-sm shadow-soft shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none mt-2"
+            className="w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-body font-bold text-sm shadow-soft shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none mt-2"
           >
             {enviandoEmail ? (
               <>
@@ -312,7 +312,7 @@ export default function LoginPage() {
             {iniciandoGoogle ? (
               <>
                 <svg
-                  className="animate-spin w-4 h-4 text-emerald-600"
+                  className="animate-spin w-4 h-4 text-indigo-600"
                   fill="none"
                   viewBox="0 0 24 24"
                 >
@@ -362,7 +362,7 @@ export default function LoginPage() {
         {/* Informações Adicionais / Selo de Segurança com espaçamento aprimorado */}
         <div className="mt-8 pt-5 border-t border-border/20 text-center">
           <p className="text-[11px] font-body text-muted-foreground flex items-center justify-center gap-3">
-            <Shield size={14} className="text-emerald-500 shrink-0" />
+            <Shield size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
             <span>Autenticação segura e criptografada via Supabase Auth</span>
           </p>
         </div>
