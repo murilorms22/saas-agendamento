@@ -12,6 +12,8 @@ ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS profissao TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS tagline TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS descricao TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 ALTER TABLE public.empresas ADD COLUMN IF NOT EXISTS disponibilidade JSONB;
 
 -- Colunas complementares para servicos e agendamentos

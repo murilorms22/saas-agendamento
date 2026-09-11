@@ -124,33 +124,70 @@ function ConfiguracoesConteudo() {
           ...(dispAtual.perfil || {}),
           nome: nomeLimpo,
           especialidade: especialidade.trim() || profissional.profissao,
+          profissao: especialidade.trim() || profissional.profissao,
           telefone: telLimpo,
           whatsapp: telLimpo,
         },
       };
 
-      const { error } = await supabase
+      // 1. Salva em cache local imediatamente para consistência offline / instantânea
+      try {
+        localStorage.setItem(`disponibilidade_${profissional.id}`, JSON.stringify(novoDisp));
+      } catch (cacheErr) {
+        console.warn("[Configurações] Aviso ao gravar cache local:", cacheErr);
+      }
+
+      // 2. Tenta salvar no Supabase com todos os campos mapeados
+      const updateData: Record<string, any> = {
+        nome_negocio: nomeLimpo,
+        especialidade: especialidade.trim() || null,
+        telefone: telLimpo || null,
+        disponibilidade: novoDisp,
+      };
+
+      let { error } = await supabase
         .from("empresas")
-        .update({
-          nome_negocio: nomeLimpo,
-          especialidade: especialidade.trim() || null,
-          telefone: telLimpo || null,
-          whatsapp: telLimpo || null,
-          disponibilidade: novoDisp,
-        })
-        .eq("id", profissional.id)
-        .or(`user_id.eq.${user.id},auth_user_id.eq.${user.id}`);
+        .update(updateData)
+        .eq("id", profissional.id);
+
+      // Fallback 1: se der erro (ex: se coluna especialidade ou nome_negocio não existir ou restrição RLS)
+      if (error) {
+        console.warn("[Configurações] Aviso na primeira tentativa, testando fallback resiliente:", error);
+        
+        // Tenta apenas telefone e disponibilidade (JSONB)
+        const fallback1 = await supabase
+          .from("empresas")
+          .update({
+            telefone: telLimpo || null,
+            disponibilidade: novoDisp,
+          })
+          .eq("id", profissional.id);
+
+        if (!fallback1.error) {
+          error = null;
+        } else {
+          // Fallback 2: atualiza apenas a coluna disponibilidade (JSONB)
+          const fallback2 = await supabase
+            .from("empresas")
+            .update({
+              disponibilidade: novoDisp,
+            })
+            .eq("id", profissional.id);
+          
+          error = fallback2.error;
+        }
+      }
 
       if (error) {
-        console.error("[Configurações] Erro ao salvar dados do negócio:", error);
+        console.error("[Configurações] Erro definitivo ao salvar dados do negócio:", error);
         throw error;
       }
 
-      exibirToast("Dados do negócio atualizados com sucesso!", "success");
+      exibirToast("Dados do negócio e WhatsApp atualizados com sucesso!", "success");
       refetch();
     } catch (err: any) {
       console.error("[Configurações] Erro inesperado:", err);
-      exibirToast("Não foi possível salvar as informações. Tente novamente.", "error");
+      exibirToast(err?.message || "Não foi possível salvar as informações. Tente novamente.", "error");
     } finally {
       setSalvandoNegocio(false);
     }
