@@ -1076,7 +1076,7 @@ function FluxoAgendamentoConteudo() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-background via-background to-primary/5 py-2 sm:py-4 px-3 sm:px-6 flex flex-col justify-start items-center relative overflow-y-auto">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-gradient-to-br from-background via-background to-primary/5 pt-3 sm:pt-6 pb-20 sm:pb-12 px-3 sm:px-6 flex flex-col justify-start items-center relative overflow-y-auto">
       {/* ── Toast Flutuante de Alertas ── */}
       <AnimatePresence>
         {toast && (
@@ -1246,7 +1246,7 @@ function FluxoAgendamentoConteudo() {
 
                     {/* Texto da Etapa */}
                     <span
-                      className={`mt-1 font-body text-[10px] sm:text-[11px] whitespace-nowrap transition-colors select-none ${
+                      className={`mt-1 font-body text-[9px] sm:text-[11px] whitespace-nowrap transition-colors select-none ${
                         ativa
                           ? "text-primary font-extrabold"
                           : concluida
@@ -1260,7 +1260,7 @@ function FluxoAgendamentoConteudo() {
 
                   {/* Linha conectora entre este círculo e o próximo */}
                   {index < ETAPAS.length - 1 && (
-                    <div className="flex-1 h-0.5 bg-border/60 mx-1.5 sm:mx-2 rounded-full overflow-hidden relative">
+                    <div className="flex-1 min-w-[8px] h-0.5 bg-border/60 mx-1 sm:mx-2 rounded-full overflow-hidden relative">
                       <motion.div
                         className="h-full bg-primary rounded-full"
                         initial={false}
@@ -1938,7 +1938,7 @@ function FluxoAgendamentoConteudo() {
                         type="button"
                         disabled={salvando}
                         onClick={handleConfirmarAgendamento}
-                        className="w-full py-2.5 sm:py-3 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs sm:text-sm shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="w-full py-3 sm:py-3.5 rounded-xl bg-primary text-primary-foreground font-body font-bold text-xs sm:text-sm shadow-soft hover:shadow-soft-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
                       >
                         {salvando ? (
                           <>
@@ -1959,12 +1959,12 @@ function FluxoAgendamentoConteudo() {
             </div>
 
             {/* ── Barra de Navegação Inferior (Voltar / Avançar) ── */}
-            <div className="pt-2.5 mt-2.5 border-t border-border/30 flex items-center justify-between gap-3">
+            <div className="pt-3 mt-3 border-t border-border/30 flex items-center justify-between gap-3">
               {passoAtual > 1 ? (
                 <button
                   type="button"
                   onClick={() => navegarParaPasso((passoAtual - 1) as EtapaFluxo)}
-                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-body font-bold text-foreground transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <ArrowLeft size={14} />
                   Voltar
@@ -1978,7 +1978,7 @@ function FluxoAgendamentoConteudo() {
                   type="button"
                   disabled={!servicoEscolhido}
                   onClick={() => navegarParaPasso(2)}
-                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este serviço
                   <ArrowRight size={14} />
@@ -1990,7 +1990,7 @@ function FluxoAgendamentoConteudo() {
                   type="button"
                   disabled={!horarioSelecionado}
                   onClick={() => navegarParaPasso(3)}
-                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Continuar com este horário
                   <ArrowRight size={14} />
@@ -2001,7 +2001,7 @@ function FluxoAgendamentoConteudo() {
                 <button
                   type="button"
                   onClick={() => navegarParaPasso(4)}
-                  className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-body font-bold shadow-soft hover:shadow-soft-lg transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   Continuar para o Resumo
                   <ArrowRight size={14} />
