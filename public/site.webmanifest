@@ -1,7 +1,21 @@
 {
-  "name": "Praxis - Gestão e Agendamento",
+  "name": "Praxis - Gestão Clínica",
   "short_name": "Praxis",
+  "description": "Sistema de agendamento e gestão para consultórios",
+  "start_url": "/admin",
+  "scope": "/",
   "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/android-chrome-192x192.png",
       "sizes": "192x192",
@@ -13,7 +27,8 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#4f46e5",
+  "theme_color": "#0284c7",
   "background_color": "#ffffff",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "any"
 }

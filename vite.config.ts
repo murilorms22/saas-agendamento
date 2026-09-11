@@ -17,11 +17,12 @@ export default defineConfig({
         name: 'Praxis - Gestão Clínica',
         short_name: 'Praxis',
         description: 'Sistema de agendamento e gestão para consultórios',
+        start_url: '/admin',
+        scope: '/',
         theme_color: '#0284c7',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
         icons: [
           {
             src: '/pwa-192x192.png',
