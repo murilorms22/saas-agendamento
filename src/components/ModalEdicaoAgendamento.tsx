@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
+import { extrairMinutos, horaParaMinutos } from "../store/useProfessional";
 
 export type StatusAgendamento = "Pendente" | "Confirmado" | "Finalizado" | "Cancelado";
 
@@ -87,7 +88,7 @@ export function ModalEdicaoAgendamento({
 
   // Trava de Segurança: agendamentos existentes no dia para evitar choque de horário
   const [agendamentosDoDia, setAgendamentosDoDia] = useState<
-    { id: string; horario: string; nomeCliente: string }[]
+    { id: string; horario: string; duracaoMinutos: number; nomeCliente: string }[]
   >([]);
   const [erroTrava, setErroTrava] = useState<string | null>(null);
 
@@ -137,7 +138,7 @@ export function ModalEdicaoAgendamento({
       try {
         const { data: ags, error } = await supabase
           .from("agendamentos")
-          .select("id, horario, data, data_hora_agendamento, nome_cliente, status, clientes(nome)")
+          .select("id, horario, data, data_hora_agendamento, servico_id, servico, servico_nome, nome_cliente, status, servicos:servico_id(duracao, duracao_minutos), clientes(nome)")
           .eq("empresa_id", empresaId)
           .neq("status", "Cancelado");
 
@@ -155,9 +156,18 @@ export function ModalEdicaoAgendamento({
               }
               const cliNome = Array.isArray(a.clientes) ? a.clientes[0]?.nome : (a.clientes as any)?.nome;
               const nome = a.nome_cliente || a.cliente_nome || a.nome || cliNome || "Paciente";
+
+              let dur = extrairMinutos(a.servicos?.duracao_minutos || a.servicos?.duracao, 0);
+              if (!dur && servicos) {
+                const s = servicos.find((srv) => String(srv.id) === String(a.servico_id) || srv.nome.toLowerCase() === (a.servico_nome || a.servico || "").toLowerCase());
+                if (s) dur = extrairMinutos(s.duracao, 0);
+              }
+              if (!dur) dur = 60;
+
               return {
                 id: String(a.id),
                 horario: h ?? "08:00",
+                duracaoMinutos: dur,
                 nomeCliente: nome,
               };
             });
@@ -170,7 +180,7 @@ export function ModalEdicaoAgendamento({
     }
 
     carregarOcupados();
-  }, [empresaId, dataSelecionada, aberto]);
+  }, [empresaId, dataSelecionada, aberto, servicos]);
 
   // Fecha dropdown se clicar fora
   useEffect(() => {
@@ -213,14 +223,22 @@ export function ModalEdicaoAgendamento({
     const nomeLimpo = nomeCliente.trim();
     if (!nomeLimpo) return;
 
+    const servObj = servicos.find((s) => s.nome === servicoNome || String(s.id) === String(servicoNome));
+    const duracaoMin = extrairMinutos(servObj?.duracao, 60);
+    const novoStart = horaParaMinutos(horario);
+    const novoEnd = novoStart + duracaoMin;
+
     // 1. Trava de Segurança Local (caso o status não seja Cancelado)
     if (status !== "Cancelado") {
-      const conflitoLocal = agendamentosDoDia.find(
-        (a) => a.horario === horario && String(a.id) !== String(agendamento.id)
-      );
+      const conflitoLocal = agendamentosDoDia.find((a) => {
+        if (String(a.id) === String(agendamento.id)) return false;
+        const agStart = horaParaMinutos(a.horario);
+        const agEnd = agStart + (a.duracaoMinutos || 60);
+        return novoStart < agEnd && novoEnd > agStart;
+      });
 
       if (conflitoLocal) {
-        setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${conflitoLocal.nomeCliente} nesta data!`);
+        setErroTrava(`Trava de segurança: O horário das ${horario} (${duracaoMin} min) conflita com o agendamento de ${conflitoLocal.nomeCliente} (início às ${conflitoLocal.horario})!`);
         return;
       }
     }
@@ -230,22 +248,32 @@ export function ModalEdicaoAgendamento({
       try {
         const { data: conflitosNoBanco } = await supabase
           .from("agendamentos")
-          .select("id, nome_cliente, clientes(nome)")
+          .select("id, horario, servico_id, servico, servico_nome, nome_cliente, status, servicos:servico_id(duracao, duracao_minutos), clientes(nome)")
           .eq("empresa_id", empresaId)
           .eq("data", dataSelecionada)
-          .eq("horario", horario)
           .neq("status", "Cancelado");
 
-        const conflitoReal = (conflitosNoBanco ?? []).find(
-          (c: any) => String(c.id) !== String(agendamento.id)
-        );
+        const conflitoReal = (conflitosNoBanco ?? []).find((c: any) => {
+          if (String(c.id) === String(agendamento.id)) return false;
+          const agH = c.horario?.slice(0, 5) || "08:00";
+          const agStart = horaParaMinutos(agH);
+          let dur = extrairMinutos(c.servicos?.duracao_minutos || c.servicos?.duracao, 0);
+          if (!dur && servicos) {
+            const s = servicos.find((srv) => String(srv.id) === String(c.servico_id) || srv.nome.toLowerCase() === (c.servico_nome || c.servico || "").toLowerCase());
+            if (s) dur = extrairMinutos(s.duracao, 0);
+          }
+          if (!dur) dur = 60;
+          const agEnd = agStart + dur;
+
+          return novoStart < agEnd && novoEnd > agStart;
+        });
 
         if (conflitoReal) {
           const cliNome = Array.isArray((conflitoReal as any).clientes)
             ? (conflitoReal as any).clientes[0]?.nome
             : (conflitoReal as any).clientes?.nome;
           const nomeConflito = conflitoReal.nome_cliente || cliNome || "outro paciente";
-          setErroTrava(`Trava de segurança: O horário das ${horario} já está reservado para ${nomeConflito} nesta data!`);
+          setErroTrava(`Trava de segurança: O horário das ${horario} (${duracaoMin} min) conflita com o agendamento de ${nomeConflito}!`);
           return;
         }
       } catch (checkErr) {
@@ -305,9 +333,17 @@ export function ModalEdicaoAgendamento({
   const telefoneNumeros = telefone.replace(/\D/g, "");
   const linkWhatsApp = telefoneNumeros ? `https://wa.me/55${telefoneNumeros}` : null;
 
-  const conflitoAtual = agendamentosDoDia.find(
-    (a) => a.horario === horario && String(a.id) !== String(agendamento.id) && status !== "Cancelado"
-  );
+  const servObjAtual = servicos.find((s) => s.nome === servicoNome || String(s.id) === String(servicoNome));
+  const duracaoMinAtual = extrairMinutos(servObjAtual?.duracao, 60);
+  const candStartAtual = horaParaMinutos(horario);
+  const candEndAtual = candStartAtual + duracaoMinAtual;
+
+  const conflitoAtual = agendamentosDoDia.find((a) => {
+    if (String(a.id) === String(agendamento.id) || status === "Cancelado") return false;
+    const agStart = horaParaMinutos(a.horario);
+    const agEnd = agStart + (a.duracaoMinutos || 60);
+    return candStartAtual < agEnd && candEndAtual > agStart;
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -537,9 +573,14 @@ export function ModalEdicaoAgendamento({
                 }`}
               >
                 {horariosDisponiveis.map((h) => {
-                  const ocupado = agendamentosDoDia.find(
-                    (a) => a.horario === h && String(a.id) !== String(agendamento.id)
-                  );
+                  const hStart = horaParaMinutos(h);
+                  const hEnd = hStart + duracaoMinAtual;
+                  const ocupado = agendamentosDoDia.find((a) => {
+                    if (String(a.id) === String(agendamento.id)) return false;
+                    const agStart = horaParaMinutos(a.horario);
+                    const agEnd = agStart + (a.duracaoMinutos || 60);
+                    return hStart < agEnd && hEnd > agStart;
+                  });
                   return (
                     <option key={h} value={h} disabled={Boolean(ocupado)}>
                       {h} {ocupado ? `— ⚠️ Ocupado (${ocupado.nomeCliente})` : ""}

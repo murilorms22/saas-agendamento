@@ -171,15 +171,23 @@ export function extrairMinutos(duracao: string | number | undefined | null, fall
   return total > 0 ? total : fallback;
 }
 
-function calcularHorariosDisponiveis(disponibilidade: any, intervaloPadrao = 60): string[] {
-  if (!disponibilidade?.horarios) {
-    return ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+export function horaParaMinutos(horaStr: string): number {
+  if (!horaStr) return 0;
+  const [h = 0, m = 0] = horaStr.split(":").map(Number);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+function calcularHorariosDisponiveis(disponibilidade: any, _intervaloPadrao = 30): string[] {
+  const fallback30: string[] = [];
+  for (let m = 8 * 60; m <= 18 * 60; m += 30) {
+    const hh = Math.floor(m / 60);
+    const mm = m % 60;
+    fallback30.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
   }
 
-  const intervaloMinutos = extrairMinutos(
-    disponibilidade?.duracaoAtendimento || disponibilidade?.intervaloMinutos,
-    intervaloPadrao
-  );
+  if (!disponibilidade?.horarios) {
+    return fallback30;
+  }
 
   const setHorarios = new Set<string>();
   const dias = Object.values(disponibilidade.horarios) as any[];
@@ -201,9 +209,10 @@ function calcularHorariosDisponiveis(disponibilidade: any, intervaloPadrao = 60)
       minIntFim = hf * 60 + mf;
     }
 
-    for (let cur = minInicio; cur + intervaloMinutos <= minFim; cur += intervaloMinutos) {
+    // Possibilidades de agendamento em passos de 30 em 30 minutos
+    for (let cur = minInicio; cur <= minFim - 30; cur += 30) {
       // Se coincidir com o intervalo do profissional, pula
-      if (d.temIntervalo && cur >= minIntIni && cur < minIntFim) {
+      if (d.temIntervalo && minIntIni >= 0 && minIntFim >= 0 && cur >= minIntIni && cur < minIntFim) {
         continue;
       }
       const hh = Math.floor(cur / 60);
@@ -213,9 +222,7 @@ function calcularHorariosDisponiveis(disponibilidade: any, intervaloPadrao = 60)
   });
 
   const ordenados = Array.from(setHorarios).sort();
-  return ordenados.length > 0
-    ? ordenados
-    : ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+  return ordenados.length > 0 ? ordenados : fallback30;
 }
 
 function mapearEmpresa(row: any, servicos: Servico[]): ProfessionalData {

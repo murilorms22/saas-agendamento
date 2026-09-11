@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useProfessional, extrairMinutos, type Servico } from "../../store/useProfessional";
+import { useProfessional, extrairMinutos, horaParaMinutos, type Servico } from "../../store/useProfessional";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLoader } from "../../components/PageLoader";
 import { supabase } from "../../lib/supabase";
@@ -165,6 +165,9 @@ function FluxoAgendamentoConteudo() {
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null);
   const [horariosOcupados, setHorariosOcupados] = useState<string[]>([]);
+  const [agendamentosAtivosDoDia, setAgendamentosAtivosDoDia] = useState<
+    Array<{ horario: string; duracaoMinutos: number }>
+  >([]);
   const [carregandoHorarios, setCarregandoHorarios] = useState(false);
 
   // ── Etapa 3: Identificação / Autenticação ──
@@ -444,7 +447,7 @@ function FluxoAgendamentoConteudo() {
     };
   }, [user?.id, profissional?.id]);
 
-  // ── Busca de Horários Ocupados do Banco para a Data Selecionada ──
+  // ── Busca de Agendamentos Ativos do Banco para a Data Selecionada ──
   useEffect(() => {
     let ativo = true;
 
@@ -457,7 +460,7 @@ function FluxoAgendamentoConteudo() {
       try {
         const { data, error } = await supabase
           .from("agendamentos")
-          .select("horario, status")
+          .select("id, horario, servico_id, servico, servico_nome, status, servicos:servico_id(duracao, duracao_minutos)")
           .eq("empresa_id", profissional.id)
           .eq("data", dataStr)
           .neq("status", "Cancelado");
@@ -465,15 +468,26 @@ function FluxoAgendamentoConteudo() {
         if (!ativo) return;
 
         if (!error && data) {
-          const ocupados = data
-            .map((item: any) => item.horario?.slice(0, 5))
-            .filter(Boolean);
-          setHorariosOcupados(ocupados);
+          const ags = data.map((item: any) => {
+            const h = item.horario?.slice(0, 5) || "08:00";
+            let dur = extrairMinutos(item.servicos?.duracao_minutos || item.servicos?.duracao, 0);
+            if (!dur && profissional?.servicos) {
+              const s = profissional.servicos.find(
+                (srv) =>
+                  String(srv.id) === String(item.servico_id) ||
+                  srv.nome.toLowerCase() === (item.servico_nome || item.servico || "").toLowerCase()
+              );
+              if (s) dur = extrairMinutos(s.duracao, 0);
+            }
+            if (!dur) dur = 60;
+            return { horario: h, duracaoMinutos: dur };
+          });
+          setAgendamentosAtivosDoDia(ags);
         } else {
-          setHorariosOcupados([]);
+          setAgendamentosAtivosDoDia([]);
         }
       } catch (err) {
-        console.error("[LandingPage] Erro ao consultar horários ocupados:", err);
+        console.error("[LandingPage] Erro ao consultar agendamentos:", err);
       } finally {
         if (ativo) setCarregandoHorarios(false);
       }
@@ -484,9 +498,9 @@ function FluxoAgendamentoConteudo() {
     return () => {
       ativo = false;
     };
-  }, [dataSelecionada, profissional?.id]);
+  }, [dataSelecionada, profissional?.id, profissional?.servicos]);
 
-  // ── Cálculo dos Slots Disponíveis do Dia com base na Disponibilidade ──
+  // ── Cálculo dos Slots Disponíveis do Dia em Passos de 30 Minutos ──
   const slotsDoDia = useMemo<{ slots: string[]; bloqueado: boolean; motivo?: string }>(() => {
     const dataStr = format(dataSelecionada, "yyyy-MM-dd");
     const hoje = isToday(dataSelecionada);
@@ -507,15 +521,10 @@ function FluxoAgendamentoConteudo() {
       }
     }
 
-    // 2. Extrai intervalo em minutos (prioriza o serviço escolhido, depois configuração da clínica, com fallback 60 min)
-    const intervaloMinutos = extrairMinutos(
-      servicoEscolhido?.duracao ||
-        profissional.disponibilidade?.duracaoAtendimento ||
-        profissional.disponibilidade?.intervaloMinutos,
-      60
-    );
+    // 2. Duração em minutos do serviço selecionado
+    const duracaoServicoMinutos = extrairMinutos(servicoEscolhido?.duracao, 60);
 
-    // 3. Checa horários do dia da semana e remove intervalos
+    // 3. Checa horários do dia da semana e gera slots de 30 em 30 minutos
     const mapaDias: Array<"dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"> = [
       "dom",
       "seg",
@@ -550,33 +559,29 @@ function FluxoAgendamentoConteudo() {
         minIntFim = hf * 60 + mf;
       }
 
-      for (let cur = minInicio; cur + intervaloMinutos <= minFim; cur += intervaloMinutos) {
-        // Exclui os horários de almoço / intervalo configurados
-        if (configDia.temIntervalo && cur >= minIntIni && cur < minIntFim) {
-          continue;
+      // Gera slots de 30 em 30 minutos garantindo que o atendimento termine dentro do expediente
+      for (let cur = minInicio; cur + duracaoServicoMinutos <= minFim; cur += 30) {
+        // Exclui os slots que cruzam com o intervalo de almoço/descanso
+        if (configDia.temIntervalo && minIntIni >= 0 && minIntFim >= 0) {
+          const curEnd = cur + duracaoServicoMinutos;
+          if (cur < minIntFim && curEnd > minIntIni) {
+            continue;
+          }
         }
         const hh = Math.floor(cur / 60);
         const mm = cur % 60;
         todosSlots.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
       }
     } else {
-      // Fallback padrão
-      todosSlots = [
-        ...(profissional.horariosDisponiveis || [
-          "08:00",
-          "09:00",
-          "10:00",
-          "11:00",
-          "13:00",
-          "14:00",
-          "15:00",
-          "16:00",
-          "17:00",
-        ]),
-      ];
+      // Fallback padrão: das 08:00 às 18:00 em passos de 30 min
+      for (let cur = 8 * 60; cur + duracaoServicoMinutos <= 18 * 60; cur += 30) {
+        const hh = Math.floor(cur / 60);
+        const mm = cur % 60;
+        todosSlots.push(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
+      }
     }
 
-    // 4. Se a data for hoje, remove da lista de opções todos os horários que já passaram
+    // 4. Se a data for hoje, remove horários passados
     if (hoje) {
       const agora = new Date();
       const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
@@ -587,7 +592,26 @@ function FluxoAgendamentoConteudo() {
     }
 
     return { slots: todosSlots, bloqueado: false };
-  }, [dataSelecionada, profissional.disponibilidade, profissional.horariosDisponiveis, servicoEscolhido?.duracao]);
+  }, [dataSelecionada, profissional.disponibilidade, servicoEscolhido?.duracao]);
+
+  // ── Cálculo dos Horários Ocupados / Conflitantes por Intervalo [Início, Fim) ──
+  useEffect(() => {
+    const duracaoMinutos = extrairMinutos(servicoEscolhido?.duracao, 60);
+
+    const ocupados = slotsDoDia.slots.filter((slot) => {
+      const candStart = horaParaMinutos(slot);
+      const candEnd = candStart + duracaoMinutos;
+
+      // Um horário fica indisponível se qualquer agendamento existente colidir no intervalo
+      return agendamentosAtivosDoDia.some((ag) => {
+        const agStart = horaParaMinutos(ag.horario);
+        const agEnd = agStart + ag.duracaoMinutos;
+        return candStart < agEnd && candEnd > agStart;
+      });
+    });
+
+    setHorariosOcupados(ocupados);
+  }, [agendamentosAtivosDoDia, slotsDoDia.slots, servicoEscolhido?.duracao]);
 
   // ── Auto-limpeza de Horário Inválido / Expirado ──
   useEffect(() => {
@@ -917,23 +941,43 @@ function FluxoAgendamentoConteudo() {
     const dataStr = format(dataSelecionada, "yyyy-MM-dd");
 
     try {
-      // 🛡️ 1. Trava de Concorrência (Race Condition Check): Checa se o horário já foi ocupado
+      // 🛡️ 1. Trava de Concorrência e Conflito de Horário por Intervalo [Início, Fim)
       const { data: conflitos, error: errConflito } = await supabase
         .from("agendamentos")
-        .select("id")
+        .select("id, horario, servico_id, servico, servico_nome, status, servicos:servico_id(duracao, duracao_minutos)")
         .eq("empresa_id", profissional.id)
         .eq("data", dataStr)
-        .or(`horario.eq.${horarioSelecionado},horario.eq.${horarioSelecionado}:00`)
-        .neq("status", "Cancelado")
-        .limit(1);
+        .neq("status", "Cancelado");
 
-      if (!errConflito && conflitos && conflitos.length > 0) {
+      const duracaoNovo = extrairMinutos(servicoEscolhido.duracao, 60);
+      const novoStart = horaParaMinutos(horarioSelecionado);
+      const novoEnd = novoStart + duracaoNovo;
+
+      const conflitoEncontrado = !errConflito && conflitos && conflitos.some((item: any) => {
+        const agH = item.horario?.slice(0, 5) || "00:00";
+        const agStart = horaParaMinutos(agH);
+        let dur = extrairMinutos(item.servicos?.duracao_minutos || item.servicos?.duracao, 0);
+        if (!dur && profissional?.servicos) {
+          const s = profissional.servicos.find(
+            (srv) =>
+              String(srv.id) === String(item.servico_id) ||
+              srv.nome.toLowerCase() === (item.servico_nome || item.servico || "").toLowerCase()
+          );
+          if (s) dur = extrairMinutos(s.duracao, 0);
+        }
+        if (!dur) dur = 60;
+        const agEnd = agStart + dur;
+
+        return novoStart < agEnd && novoEnd > agStart;
+      });
+
+      if (conflitoEncontrado) {
         // Interrompe o fluxo imediatamente e reseta o loading
         setSalvando(false);
 
         // Exibe Toast de aviso amigável (estilo Warning)
         exibirToast(
-          "Ops! Este horário acabou de ser reservado por outro cliente. Por favor, escolha outro horário disponível.",
+          "Ops! Este horário acabou de ser reservado ou conflita com outro agendamento. Por favor, escolha outro horário disponível.",
           "warning"
         );
 
