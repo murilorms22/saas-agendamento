@@ -282,7 +282,7 @@ function AparenciaServicosConteudo() {
         return;
       }
 
-      exibirToast("Aparência e vitrine da Landing Page salvas com sucesso!", "success");
+      exibirToast("Aparência da página de agendamentos salva com sucesso!", "success");
       refetch();
     } catch (err) {
       console.error("[Aparência] Erro inesperado:", err);
@@ -434,7 +434,7 @@ function AparenciaServicosConteudo() {
         console.warn("[Serviços] Nota ao atualizar coluna ativo (opcional no schema):", error);
       } else {
         exibirToast(
-          novoStatus ? "Serviço ativado na Landing Page!" : "Serviço ocultado da Landing Page.",
+          novoStatus ? "Serviço ativado na página de agendamentos!" : "Serviço ocultado da página de agendamentos.",
           "success"
         );
       }
@@ -632,10 +632,10 @@ function AparenciaServicosConteudo() {
         <div>
           <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
             <Sparkles size={20} className="text-primary" />
-            <span>Identidade Visual & Textos da Vitrine</span>
+            <span>Identidade Visual & Textos da Página de Agendamentos</span>
           </h2>
           <p className="text-xs font-body text-muted-foreground">
-            Personalize a paleta de cores, logotipo e slogans apresentados aos pacientes na página pública.
+            Personalize as cores, logotipo e informações apresentadas aos clientes na página pública de agendamento.
           </p>
         </div>
 
@@ -879,7 +879,7 @@ function AparenciaServicosConteudo() {
           <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
             <div className="flex items-center gap-2 text-foreground font-display font-bold text-sm">
               <Eye size={16} className="text-primary" />
-              <span>Pré-visualização da Landing Page</span>
+              <span>Pré-visualização da Página do Cliente</span>
             </div>
 
             <div className="bg-card rounded-3xl border border-border/70 shadow-floating overflow-hidden">
@@ -1102,14 +1102,14 @@ function AparenciaServicosConteudo() {
                   />
                 </div>
 
-                {/* Toggle Visível na Landing Page */}
+                {/* Toggle Visível na Página de Agendamentos */}
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-secondary/40 border border-border/40">
                   <div>
                     <p className="font-display font-bold text-xs text-foreground">
-                      Visível na Landing Page
+                      Visível na Página de Agendamentos
                     </p>
                     <p className="font-body text-[11px] text-muted-foreground">
-                      Permite que pacientes agendem este serviço online
+                      Permite que clientes agendem este serviço online
                     </p>
                   </div>
                   <button

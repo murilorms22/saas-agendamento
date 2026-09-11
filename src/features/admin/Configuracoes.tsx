@@ -551,7 +551,7 @@ function ConfiguracoesConteudo() {
                 </span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Status da Vitrine:</span>
+                <span>Página de Agendamentos:</span>
                 <span className="text-emerald-600 font-bold">Ativa</span>
               </div>
             </div>
